@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permite leitura/escrita apenas para usuários autenticados
+    match /{collection}/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Opcional: Permite leitura pública de alguns dados (se necessário)
+    match /dados_publicos/{document} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
