@@ -2,6 +2,7 @@
 import {
   Home,
   Laptop,
+  Boxes,
   KeyRound,
   Download as DownloadIcon,
   Cog,
@@ -14,6 +15,7 @@ import {
 export const primaryNav = [
   { title: "Início", to: "/", Icon: Home },
   { title: "Notebook Stock", to: "/inventory", Icon: Laptop }, // segue como principal (2º)
+  { title: "Peripherals", to: "/peripherals", Icon: Boxes },
   { title: "Onboarding Nacional", to: "/onboarding", Icon: FileText },
   { title: "Documentation", to: "/docs", Icon: FileText },
   { title: "Weekly Tasks", to: "/weekly-tasks", Icon: ListChecks },

@@ -28,6 +28,7 @@ import MovementListPage from "./pages/MovementListPage";
 import SettingsPage from "./pages/SettingsPage";
 import LicensesPage from "./pages/LicensesPage";
 import DownloadsPage from "./pages/DownloadsPage";
+import PeripheralsPage from "./pages/PeripheralsPage";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -203,6 +204,14 @@ function App() {
             element={
               <RotaPrivada>
                 <InventoryPage />
+              </RotaPrivada>
+            }
+          />
+          <Route
+            path="/peripherals"
+            element={
+              <RotaPrivada>
+                <PeripheralsPage />
               </RotaPrivada>
             }
           />

@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Home,
   Laptop,
+  Boxes,
   FileText,
   Truck,
   ListChecks,
@@ -10,22 +12,54 @@ import {
   Download,
   Building2,
 } from "lucide-react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function SideMenu({ collapsed = false }) {
+  const [dynamicOffices, setDynamicOffices] = useState([]);
+
+  useEffect(() => {
+    const settingsDocRef = doc(db, "appSettings", "global");
+    const unsubscribe = onSnapshot(
+      settingsDocRef,
+      (snapshot) => {
+        const data = snapshot.data();
+        const offices = Array.isArray(data?.offices)
+          ? data.offices
+              .map((office) => {
+                const nome = (office?.nome || office?.label || "").trim();
+                if (!nome) return null;
+                const slug =
+                  office?.slug ||
+                  nome
+                    .toLowerCase()
+                    .normalize("NFD")
+                    .replace(/\p{Diacritic}/gu, "")
+                    .replace(/\s+/g, "-");
+                return {
+                  nome,
+                  slug,
+                };
+              })
+              .filter(Boolean)
+          : [];
+        setDynamicOffices(offices);
+      },
+      () => {
+        setDynamicOffices([]);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
   const principal = [
     { to: "/", label: "Início", icon: Home },
     { to: "/inventory", label: "Notebook Stock", icon: Laptop },
+    { to: "/peripherals", label: "Peripherals", icon: Boxes },
     { to: "/onboarding", label: "Onboarding", icon: FileText },
     { to: "/docs", label: "Documentation", icon: FileText },
     { to: "/weekly-tasks", label: "Weekly Tasks", icon: ListChecks },
     { to: "/equipment-movement", label: "Equipment Movement", icon: Truck },
-  ];
-
-  const offices = [
-    { to: "/sp", label: "São Paulo", icon: Building2 },
-    { to: "/rio", label: "Rio de Janeiro", icon: Building2 },
-    { to: "/jp", label: "João Pessoa", icon: Building2 },
-    { to: "/ou", label: "Outros", icon: Building2 },
   ];
 
   const extras = [
@@ -77,21 +111,29 @@ export default function SideMenu({ collapsed = false }) {
       </ul>
 
       {/* Offices */}
-      <div
-        className={[
-          "px-4 pb-2 text-xs tracking-wide text-[var(--text-muted)] select-none transition-opacity",
-          collapsed ? "opacity-0 h-0 overflow-hidden" : "opacity-100",
-        ].join(" ")}
-      >
-        OFFICES
-      </div>
-      <ul className="space-y-1 mb-3">
-        {offices.map((it) => (
-          <li key={it.to}>
-            <Item to={it.to} label={it.label} Icon={it.icon} />
-          </li>
-        ))}
-      </ul>
+      {dynamicOffices.length > 0 && (
+        <>
+          <div
+            className={[
+              "px-4 pb-2 text-xs tracking-wide text-[var(--text-muted)] select-none transition-opacity",
+              collapsed ? "opacity-0 h-0 overflow-hidden" : "opacity-100",
+            ].join(" ")}
+          >
+            OFFICES
+          </div>
+          <ul className="space-y-1 mb-3">
+            {dynamicOffices.map((office) => (
+              <li key={office.slug}>
+                <Item
+                  to={`/equipment-movement/${office.slug}`}
+                  label={office.nome}
+                  Icon={Building2}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {/* Extras */}
       <div

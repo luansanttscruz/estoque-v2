@@ -8,14 +8,14 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { KeyRound, Laptop, PlusCircle, Trash2, Copy } from "lucide-react";
+import { KeyRound, Laptop, PlusCircle, Trash2, Copy, Hash } from "lucide-react";
 import { db } from "../firebase";
 import showToast from "../utils/showToast";
 
 const COLLECTION_NAME = "licenses-machines";
 
 export default function LicensesPage() {
-  const [form, setForm] = useState({ machine: "", recoveryKey: "" });
+  const [form, setForm] = useState({ machine: "", serial: "", recoveryKey: "" });
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState("");
@@ -54,6 +54,7 @@ export default function LicensesPage() {
     return items.filter(
       (item) =>
         item.machine?.toLowerCase().includes(lower) ||
+        item.serial?.toLowerCase().includes(lower) ||
         item.recoveryKey?.toLowerCase().includes(lower)
     );
   }, [items, filter]);
@@ -61,12 +62,13 @@ export default function LicensesPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     const machine = form.machine.trim();
+    const serial = form.serial.trim();
     const recoveryKey = form.recoveryKey.trim();
 
-    if (!machine || !recoveryKey) {
+    if (!machine || !serial || !recoveryKey) {
       showToast({
         type: "error",
-        message: "Informe a máquina e a recovery key.",
+        message: "Informe máquina, serial e a recovery key.",
       });
       return;
     }
@@ -74,6 +76,7 @@ export default function LicensesPage() {
     try {
       await addDoc(collection(db, COLLECTION_NAME), {
         machine,
+        serial,
         recoveryKey,
         createdAt: new Date(),
       });
@@ -82,7 +85,7 @@ export default function LicensesPage() {
         type: "success",
         message: "Licença cadastrada com sucesso.",
       });
-      setForm({ machine: "", recoveryKey: "" });
+      setForm({ machine: "", serial: "", recoveryKey: "" });
     } catch (error) {
       console.error("Erro ao salvar licença:", error);
       showToast({
@@ -155,7 +158,7 @@ export default function LicensesPage() {
       <section className="rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-lg">
         <form
           onSubmit={handleSubmit}
-          className="grid gap-4 px-6 py-5 md:grid-cols-[2fr,2fr,auto]"
+          className="grid gap-4 px-6 py-5 md:grid-cols-[2fr,1.5fr,1.5fr,auto]"
         >
           <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
             Máquina
@@ -168,6 +171,22 @@ export default function LicensesPage() {
                 }))
               }
               placeholder="Ex.: MacBook - João Silva"
+              className="input-neon"
+              required
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+            Serial
+            <input
+              value={form.serial}
+              onChange={(event) =>
+                setForm((prev) => ({
+                  ...prev,
+                  serial: event.target.value,
+                }))
+              }
+              placeholder="Ex.: C02YD0ABC123"
               className="input-neon"
               required
             />
@@ -225,6 +244,7 @@ export default function LicensesPage() {
             <thead className="bg-[var(--bg-card)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
               <tr>
                 <th className="px-4 py-3">Máquina</th>
+                <th className="px-4 py-3">Serial</th>
                 <th className="px-4 py-3">Recovery Key</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
@@ -233,7 +253,7 @@ export default function LicensesPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     className="px-4 py-6 text-center text-[var(--text-muted)]"
                   >
                     Carregando registros...
@@ -242,7 +262,7 @@ export default function LicensesPage() {
               ) : filteredItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     className="px-4 py-6 text-center text-[var(--text-muted)]"
                   >
                     Nenhum registro encontrado.
@@ -256,11 +276,24 @@ export default function LicensesPage() {
                     </td>
                     <td className="px-4 py-3 text-[var(--text)]">
                       <span className="font-mono text-sm">
+                        {item.serial || "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--text)]">
+                      <span className="font-mono text-sm">
                         {item.recoveryKey || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(item.serial)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition hover:bg-white/5"
+                        >
+                          <Hash className="w-4 h-4" />
+                          Copiar serial
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleCopy(item.recoveryKey)}
