@@ -1,6 +1,6 @@
 // src/pages/Menu.jsx  (PÁGINA DE CARDS)
 import { Link } from "react-router-dom";
-import { Laptop, FileText, Truck, ListChecks, Settings } from "lucide-react";
+import { Laptop, FileText, Truck, ListChecks, Settings, Boxes } from "lucide-react";
 import { motion } from "framer-motion";
 
 const cards = [
@@ -9,6 +9,12 @@ const cards = [
     title: "Notebook Stock",
     subtitle: "Manage the notebooks",
     Icon: Laptop,
+  },
+  {
+    to: "/peripherals",
+    title: "Peripherals",
+    subtitle: "Manage peripherals",
+    Icon: Boxes,
   },
   {
     to: "/onboarding",

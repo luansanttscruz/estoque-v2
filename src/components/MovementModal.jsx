@@ -287,7 +287,7 @@ export default function MovementModal({
       const collectionName = officeToCollection(local || office);
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
-      const maintainStock = tipo !== "Saida";
+      const maintainStock = variant !== "inventory" && tipo !== "Saida";
       const previousMaintained =
         previousTipo !== "Saida" && Boolean(previousSerial);
       const isSameLocation =
@@ -372,7 +372,7 @@ export default function MovementModal({
           ...payload,
           historico: [...historicoAnterior, historyEntry],
         });
-      } else {
+      } else if (variant !== "inventory") {
         await addDoc(collection(db, "equipment-movements"), {
           ...payload,
           historico: [historyEntry],

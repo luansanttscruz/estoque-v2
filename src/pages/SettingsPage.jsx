@@ -14,6 +14,16 @@ import {
   Cpu,
   Sun,
   Moon,
+  Headphones,
+  Keyboard,
+  Monitor,
+  Mouse,
+  Printer,
+  HardDrive,
+  Plug,
+  Router,
+  Server,
+  Tablet,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useSidebar } from "../context/SidebarContext";
@@ -128,6 +138,24 @@ const DEFAULT_CONFIG = {
         enabled: false,
       },
     ],
+    locations: [
+      { id: "sao-paulo", label: "São Paulo", system: true },
+      { id: "rio-de-janeiro", label: "Rio de Janeiro", system: true },
+      { id: "joao-pessoa", label: "João Pessoa", system: true },
+      { id: "outros", label: "Outros", system: true },
+    ],
+  },
+  peripherals: {
+    categories: [
+      { id: "headset", label: "Fones", icon: "headphones", system: true },
+      {
+        id: "keyboard-mouse",
+        label: "Teclados / Mouses",
+        icon: "keyboard",
+        system: true,
+      },
+      { id: "monitor", label: "Monitores", icon: "monitor", system: true },
+    ],
   },
 };
 
@@ -229,10 +257,57 @@ const normalizeModels = (list) =>
     })
     .filter(Boolean);
 
+const normalizePeripheralCategories = (list) =>
+  ensureArray(list, DEFAULT_CONFIG.peripherals.categories)
+    .map((item) => {
+      if (typeof item === "string") {
+        const label = item.trim();
+        if (!label) return null;
+        return {
+          id: slugify(label) || randomId(),
+          label,
+          icon: label.toLowerCase().includes("monitor")
+            ? "monitor"
+            : label.toLowerCase().includes("mouse") ||
+              label.toLowerCase().includes("teclado")
+            ? "keyboard"
+            : "headphones",
+          system: false,
+        };
+      }
+      const label = (item?.label || item?.name || "").trim();
+      if (!label) return null;
+      return {
+        id: item?.id || slugify(label) || randomId(),
+        label,
+        icon: item?.icon || "headphones",
+        system: Boolean(item?.system),
+      };
+    })
+    .filter(Boolean);
+
+const PERIPHERAL_ICON_OPTIONS = [
+  { value: "headphones", label: "Headset / Fones", Icon: Headphones },
+  { value: "keyboard", label: "Teclados / Mouses", Icon: Keyboard },
+  { value: "monitor", label: "Monitores", Icon: Monitor },
+  { value: "mouse", label: "Mouse", Icon: Mouse },
+  { value: "printer", label: "Impressoras", Icon: Printer },
+  { value: "hard-drive", label: "Dock / Storage", Icon: HardDrive },
+  { value: "router", label: "Routers / Modems", Icon: Router },
+  { value: "plug", label: "Cabos / Energia", Icon: Plug },
+  { value: "server", label: "Racks / Servers", Icon: Server },
+  { value: "tablet", label: "Tablets / Mobile", Icon: Tablet },
+];
+
+const getPeripheralIconLabel = (icon) =>
+  PERIPHERAL_ICON_OPTIONS.find((option) => option.value === icon)?.label ||
+  icon;
+
 const buildConfigFromData = (data) => {
   const source = data && typeof data === "object" ? data : {};
   const inventorySource = source.inventory || {};
   const movementsSource = source.movements || {};
+  const peripheralsSource = source.peripherals || {};
 
   return {
     offices: ensureArray(source.offices, DEFAULT_CONFIG.offices).map(
@@ -269,6 +344,9 @@ const buildConfigFromData = (data) => {
         DEFAULT_CONFIG.movements.validations
       ).map((rule) => ({ ...rule })),
     },
+    peripherals: {
+      categories: normalizePeripheralCategories(peripheralsSource.categories),
+    },
   };
 };
 
@@ -279,6 +357,7 @@ const serializeConfig = (config) =>
       roles: config.roles,
       inventory: config.inventory,
       movements: config.movements,
+      peripherals: config.peripherals,
     })
   );
 
@@ -344,6 +423,10 @@ export default function SettingsPage() {
   const [newRole, setNewRole] = useState({ nome: "", descricao: "" });
   const [newStatus, setNewStatus] = useState("");
   const [newModel, setNewModel] = useState("");
+  const [newPeripheralCategory, setNewPeripheralCategory] = useState({
+    label: "",
+    icon: PERIPHERAL_ICON_OPTIONS[0].value,
+  });
 
   const defaultOfficeLocal = useMemo(() => {
     const primary = config.offices[0]?.nome ?? DEFAULT_CONFIG.movements.defaults.local;
@@ -508,6 +591,83 @@ export default function SettingsPage() {
     });
   };
 
+  const handleAddPeripheralCategory = (event) => {
+    event.preventDefault();
+    const label = newPeripheralCategory.label.trim();
+    if (!label) return;
+    const icon =
+      (newPeripheralCategory.icon || PERIPHERAL_ICON_OPTIONS[0].value)
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    const id = slugify(label) || randomId();
+    const exists = ensureArray(config.peripherals?.categories).some(
+      (category) =>
+        category.id === id ||
+        category.label.toLowerCase() === label.toLowerCase()
+    );
+    if (exists) {
+      setNewPeripheralCategory({
+        label: "",
+        icon: PERIPHERAL_ICON_OPTIONS[0].value,
+      });
+      return;
+    }
+
+    setConfig((prev) => ({
+      ...prev,
+      peripherals: {
+        ...prev.peripherals,
+        categories: [
+          ...ensureArray(prev.peripherals?.categories),
+          { id, label, icon, system: false },
+        ],
+      },
+    }));
+    setNewPeripheralCategory({
+      label: "",
+      icon: PERIPHERAL_ICON_OPTIONS[0].value,
+    });
+  };
+
+  const handleRemovePeripheralCategory = (id) => {
+    setConfig((prev) => {
+      const target = prev.peripherals?.categories?.find(
+        (category) => category.id === id
+      );
+      if (!target || target.system) return prev;
+      return {
+        ...prev,
+        peripherals: {
+          ...prev.peripherals,
+          categories: ensureArray(prev.peripherals?.categories).filter(
+            (category) => category.id !== id
+          ),
+        },
+      };
+    });
+  };
+
+  const handleUpdatePeripheralCategoryField = (id, field, value) => {
+    setConfig((prev) => ({
+      ...prev,
+      peripherals: {
+        ...prev.peripherals,
+        categories: ensureArray(prev.peripherals?.categories).map((category) =>
+          category.id === id
+            ? {
+                ...category,
+                [field]: field === "icon"
+                  ? value
+                  : value,
+              }
+            : category
+        ),
+      },
+    }));
+  };
+
   const handleAddRole = (event) => {
     event.preventDefault();
     const nome = newRole.nome.trim();
@@ -539,24 +699,55 @@ export default function SettingsPage() {
     setNewRole({ nome: "", descricao: "" });
   };
 
-  const handleRemoveRole = (id) => {
-    setConfig((prev) => {
-      const target = prev.roles.find((role) => role.id === id);
-      if (target?.system) return prev;
-      return {
-        ...prev,
-        roles: prev.roles.filter((role) => role.id !== id),
-      };
-    });
-  };
+  const handleRemoveRole = () => {};
+  const handleUpdateRoleDescription = () => {};
 
-  const handleUpdateRoleDescription = (id, descricao) => {
+  const [newMovementLocation, setNewMovementLocation] = useState("");
+
+  const handleAddMovementLocation = (event) => {
+    event.preventDefault();
+    const label = newMovementLocation.trim();
+    if (!label) return;
+    const id = slugify(label) || randomId();
+    const exists = ensureArray(config.movements?.locations).some(
+      (location) =>
+        location.id === id ||
+        location.label?.toLowerCase?.() === label.toLowerCase()
+    );
+    if (exists) {
+      setNewMovementLocation("");
+      return;
+    }
+
     setConfig((prev) => ({
       ...prev,
-      roles: prev.roles.map((role) =>
-        role.id === id ? { ...role, descricao } : role
-      ),
+      movements: {
+        ...prev.movements,
+        locations: [
+          ...ensureArray(prev.movements?.locations),
+          { id, label, system: false },
+        ],
+      },
     }));
+    setNewMovementLocation("");
+  };
+
+  const handleRemoveMovementLocation = (id) => {
+    setConfig((prev) => {
+      const target = prev.movements?.locations?.find(
+        (location) => location.id === id
+      );
+      if (!target || target.system) return prev;
+      return {
+        ...prev,
+        movements: {
+          ...prev.movements,
+          locations: prev.movements.locations.filter(
+            (location) => location.id !== id
+          ),
+        },
+      };
+    });
   };
 
   const handleDefaultsChange = (field, value) => {
@@ -645,6 +836,131 @@ export default function SettingsPage() {
               </button>
             );
           })}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        icon={Tag}
+        title="Categorias de Periféricos"
+        description="Personalize as categorias exibidas no módulo Peripherals."
+      >
+        <form
+          onSubmit={handleAddPeripheralCategory}
+          className="grid gap-4 md:grid-cols-[minmax(0,240px)_minmax(0,180px)_auto]"
+        >
+          <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+            Nome da categoria
+            <input
+              value={newPeripheralCategory.label}
+              onChange={(e) =>
+                setNewPeripheralCategory((prev) => ({
+                  ...prev,
+                  label: e.target.value,
+                }))
+              }
+              className="input-neon"
+              placeholder="Ex.: Bases de carregamento"
+              required
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+            Ícone
+            <select
+              value={newPeripheralCategory.icon}
+              onChange={(e) =>
+                setNewPeripheralCategory((prev) => ({
+                  ...prev,
+                  icon: e.target.value,
+                }))
+              }
+              className="input-neon"
+            >
+              {PERIPHERAL_ICON_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="btn-neon flex items-center gap-2 justify-center"
+          >
+            <Plus className="w-4 h-4" />
+            Adicionar categoria
+          </button>
+        </form>
+
+        <div className="mt-4 space-y-3">
+          {ensureArray(config.peripherals?.categories).map((category) => {
+            const IconPreview =
+              PERIPHERAL_ICON_OPTIONS.find(
+                (option) => option.value === category.icon
+              )?.Icon || Headphones;
+            return (
+              <div
+                key={category.id}
+                className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--bg-soft)]/60 px-4 py-3 md:grid-cols-[minmax(0,240px)_minmax(0,180px)_auto]"
+              >
+                <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+                  Nome
+                  <input
+                    value={category.label}
+                    onChange={(e) =>
+                      handleUpdatePeripheralCategoryField(
+                        category.id,
+                        "label",
+                        e.target.value
+                      )
+                    }
+                    className="input-neon"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+                  Ícone
+                  <select
+                    value={category.icon}
+                    onChange={(e) =>
+                      handleUpdatePeripheralCategoryField(
+                        category.id,
+                        "icon",
+                        e.target.value
+                      )
+                    }
+                    className="input-neon"
+                  >
+                    {PERIPHERAL_ICON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] px-3 py-1 text-sm text-[var(--text)]">
+                    <IconPreview className="h-4 w-4 text-[var(--accent)]" />
+                    {getPeripheralIconLabel(category.icon) !== category.label && (
+                      <span>{getPeripheralIconLabel(category.icon)}</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePeripheralCategory(category.id)}
+                    disabled={category.system}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remover
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {!config.peripherals?.categories?.length && (
+            <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-soft)]/60 px-4 py-3 text-sm text-[var(--text-muted)]">
+              Nenhuma categoria cadastrada.
+            </div>
+          )}
         </div>
       </SectionCard>
 
@@ -750,80 +1066,12 @@ export default function SettingsPage() {
       <SectionCard
         icon={ShieldCheck}
         title="Usuários & Acesso (RBAC)"
-        description="Administre papéis e descrições para controlar acesso às funcionalidades."
+        description="Área reservada para configuração detalhada de papéis e permissões."
       >
-        <form
-          onSubmit={handleAddRole}
-          className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]"
-        >
-          <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
-            Papel
-            <input
-              value={newRole.nome}
-              onChange={(e) =>
-                setNewRole((prev) => ({ ...prev, nome: e.target.value }))
-              }
-              className="input-neon"
-              placeholder="Ex.: Auditor"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
-            Descrição
-            <input
-              value={newRole.descricao}
-              onChange={(e) =>
-                setNewRole((prev) => ({ ...prev, descricao: e.target.value }))
-              }
-              className="input-neon"
-              placeholder="O que esse papel pode fazer?"
-            />
-          </label>
-          <button
-            type="submit"
-            className="btn-neon flex items-center gap-2 justify-center"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar papel
-          </button>
-        </form>
-
-        <div className="grid gap-3">
-          {config.roles.map((role) => (
-            <div
-              key={role.id}
-              className="rounded-xl border border-[var(--line)] bg-[var(--bg-soft)]/60 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 text-[var(--text)] font-medium">
-                  <ShieldCheck className="w-4 h-4 text-[var(--accent)]" />
-                  {role.nome}
-                  {role.system && (
-                    <span className="rounded-full bg-[var(--accent)]/15 text-[var(--accent)] text-[11px] px-2 py-0.5 uppercase tracking-wide">
-                      Padrão
-                    </span>
-                  )}
-                </div>
-                <textarea
-                  value={role.descricao}
-                  onChange={(e) =>
-                    handleUpdateRoleDescription(role.id, e.target.value)
-                  }
-                  className="mt-2 w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/60"
-                  rows={2}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => handleRemoveRole(role.id)}
-                disabled={role.system}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed self-start md:self-center"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Remover
-              </button>
-            </div>
-          ))}
+        <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-soft)]/60 px-4 py-5 text-sm text-[var(--text-muted)]">
+          Em breve você poderá gerenciar papéis, permissões e escalonamento de
+          acesso diretamente por aqui. Caso precise de ajustes imediatos,
+          continue utilizando os processos atuais.
         </div>
       </SectionCard>
 
