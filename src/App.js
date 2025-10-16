@@ -26,6 +26,8 @@ import EquipmentMovement from "./pages/EquipmentMovement";
 import FinalizadasPage from "./pages/FinalizadasPage";
 import MovementListPage from "./pages/MovementListPage";
 import SettingsPage from "./pages/SettingsPage";
+import LicensesPage from "./pages/LicensesPage";
+import DownloadsPage from "./pages/DownloadsPage";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -306,6 +308,23 @@ function App() {
             element={
               <RotaPrivada>
                 <MovementListPage office="João Pessoa" />
+              </RotaPrivada>
+            }
+          />
+          <Route
+            path="/licenses"
+            element={
+              <RotaPrivada>
+                <LicensesPage />
+              </RotaPrivada>
+            }
+          />
+          <Route path="/licencas" element={<Navigate to="/licenses" replace />} />
+          <Route
+            path="/downloads"
+            element={
+              <RotaPrivada>
+                <DownloadsPage />
               </RotaPrivada>
             }
           />

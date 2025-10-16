@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { updateDoc, doc, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { X, Save, CheckCircle2, XCircle } from "lucide-react";
+import { X, Save, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 import showToast from "../utils/showToast";
 
 const DEFAULT_STATUSES = [
@@ -35,6 +35,8 @@ export default function NotebookEditModal({
   onClose,
   notebook,
   collectionName,
+  onDelete,
+  deleting = false,
 }) {
   const [statuses, setStatuses] = useState(DEFAULT_STATUSES);
   const [form, setForm] = useState(() => ({
@@ -231,7 +233,7 @@ export default function NotebookEditModal({
             </div>
 
             <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
-              E-mail associado
+              E-mail
               <input
                 type="email"
                 value={form.email}
@@ -252,34 +254,50 @@ export default function NotebookEditModal({
             </label>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--line)]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
-                         hover:bg-white/5 transition"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--accent)]/60
-                         bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition
-                         disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {saving ? (
-                <>
-                  <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Salvar alterações
-                </>
-              )}
-            </button>
+          <div className="flex flex-col gap-3 pt-2 border-t border-[var(--line)] sm:flex-row sm:items-center sm:justify-between">
+            {typeof onDelete === "function" && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete?.(notebook);
+                  onClose?.();
+                }}
+                disabled={saving || deleting}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-500/60 px-4 py-2 text-sm font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleting ? "Excluindo..." : "Excluir"}
+              </button>
+            )}
+            <div className="flex items-center justify-end gap-3 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
+                           hover:bg-white/5 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving || deleting}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--accent)]/60
+                           bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Salvar alterações
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

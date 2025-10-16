@@ -14,7 +14,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { Clipboard, CheckCircle, XCircle, Mail, X } from "lucide-react";
+import { Mail, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import showToast from "../utils/showToast";
 
@@ -82,16 +82,16 @@ export default function MovementModal({
         const data = snapshot.data() || {};
         const remoteModels = Array.isArray(data?.inventory?.models)
           ? data.inventory.models.map((item) =>
-              typeof item === "string"
-                ? item
-                : item?.nome || item?.label || ""
+              typeof item === "string" ? item : item?.nome || item?.label || ""
             )
           : [];
 
         const baseList = [
           ...remoteModels,
           ...DEFAULT_MODEL_OPTIONS,
-          ...(editMovement?.modelo ? [String(editMovement.modelo || "").trim()] : []),
+          ...(editMovement?.modelo
+            ? [String(editMovement.modelo || "").trim()]
+            : []),
         ]
           .map((value) => String(value || "").trim())
           .filter((value) => value.length > 0);
@@ -102,7 +102,9 @@ export default function MovementModal({
         console.error("Não foi possível carregar modelos configurados:", error);
         const fallback = [
           ...DEFAULT_MODEL_OPTIONS,
-          ...(editMovement?.modelo ? [String(editMovement.modelo || "").trim()] : []),
+          ...(editMovement?.modelo
+            ? [String(editMovement.modelo || "").trim()]
+            : []),
         ]
           .map((value) => String(value || "").trim())
           .filter((value) => value.length > 0);
@@ -118,7 +120,11 @@ export default function MovementModal({
       setData(editMovement.data || "");
       setTipo(editMovement.tipo || "Saida");
       setModelo(editMovement.modelo ? String(editMovement.modelo).trim() : "");
-      setNumero(editMovement.numeroSerie ? normalizeSerial(editMovement.numeroSerie) : "");
+      setNumero(
+        editMovement.numeroSerie
+          ? normalizeSerial(editMovement.numeroSerie)
+          : ""
+      );
       setResponsavel(editMovement.responsavel || usuario?.email || "");
       setLocal(editMovement.local || office);
       setObs(editMovement.obs || "");
@@ -171,7 +177,9 @@ export default function MovementModal({
       events.push({
         ...sanitized,
         numeroSerie:
-          sanitized.numeroSerie || fallbackDoc?.numeroSerie || normalizeSerial(numero),
+          sanitized.numeroSerie ||
+          fallbackDoc?.numeroSerie ||
+          normalizeSerial(numero),
         registradoEm:
           sanitized.registradoEm || sanitized.criadoEm || fallbackDoc?.criadoEm,
         responsavel: sanitized.responsavel || fallbackDoc?.responsavel,
@@ -280,7 +288,8 @@ export default function MovementModal({
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
       const maintainStock = tipo !== "Saida";
-      const previousMaintained = previousTipo !== "Saida" && Boolean(previousSerial);
+      const previousMaintained =
+        previousTipo !== "Saida" && Boolean(previousSerial);
       const isSameLocation =
         previousMaintained &&
         previousSerial === normalizedNumero &&
@@ -603,7 +612,7 @@ export default function MovementModal({
                     value={obs}
                     onChange={(e) => setObs(e.target.value)}
                     rows={4}
-                    placeholder="Detalhes adicionais sobre a movimentação"
+                    placeholder="Detalhes adicionais sobre o equipamento"
                   />
                 </div>
 
@@ -678,7 +687,10 @@ export default function MovementModal({
                           <div className="flex-1 text-xs text-[var(--text)] space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold text-sm">
-                                {formatDate(mov.registradoEm || mov.criadoEm, true)}
+                                {formatDate(
+                                  mov.registradoEm || mov.criadoEm,
+                                  true
+                                )}
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -700,7 +712,9 @@ export default function MovementModal({
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  (mov.disponibilidade || "").toLowerCase().includes("dispon")
+                                  (mov.disponibilidade || "")
+                                    .toLowerCase()
+                                    .includes("dispon")
                                     ? "bg-emerald-500/15 text-emerald-300"
                                     : "bg-rose-500/15 text-rose-300"
                                 }`}
@@ -710,20 +724,28 @@ export default function MovementModal({
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[var(--text)]/90">
                               <div className="flex items-center gap-2">
-                                <span className="text-[var(--text-muted)]">Modelo:</span>
+                                <span className="text-[var(--text-muted)]">
+                                  Modelo:
+                                </span>
                                 <span>{mov.modelo || "—"}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[var(--text-muted)]">Local:</span>
+                                <span className="text-[var(--text-muted)]">
+                                  Local:
+                                </span>
                                 <span>{mov.local || "—"}</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[var(--text-muted)]">Responsável:</span>
+                                <span className="text-[var(--text-muted)]">
+                                  Responsável:
+                                </span>
                                 <span>{mov.responsavel || "—"}</span>
                               </div>
                               {mov.usuario && (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[var(--text-muted)]">Registrado por:</span>
+                                  <span className="text-[var(--text-muted)]">
+                                    Registrado por:
+                                  </span>
                                   <span>{mov.usuario}</span>
                                 </div>
                               )}

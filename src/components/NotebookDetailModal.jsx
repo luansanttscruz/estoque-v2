@@ -1,6 +1,6 @@
 // src/components/NotebookDetailModal.jsx
 import React from "react";
-import { X, Pencil, Mail, Info, CheckCircle2, XCircle, Cpu, Hash } from "lucide-react";
+import { X, Mail, Info, CheckCircle2, XCircle, Cpu, Hash } from "lucide-react";
 
 function Badge({ ok, children }) {
   return (
@@ -37,8 +37,6 @@ export default function NotebookDetailModal({
   onClose,
   notebook = {},
   onEdit, // opcional
-  onDelete,
-  deleting = false,
 }) {
   if (!open) return null;
 
@@ -78,26 +76,14 @@ export default function NotebookDetailModal({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {typeof onEdit === "function" && (
-              <button
-                onClick={() => onEdit(notebook)}
-                className="px-3 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
-                           hover:bg-white/5 transition"
-                title="Editar"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="px-3 py-2 rounded-lg border border-transparent text-[var(--text-muted)]
-                         hover:text-white hover:bg-white/5 hover:border-[var(--line)] transition"
-              title="Fechar"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-2 rounded-lg border border-transparent text-[var(--text-muted)]
+                       hover:text-white hover:bg-white/5 hover:border-[var(--line)] transition"
+            title="Fechar"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Body */}
@@ -116,7 +102,7 @@ export default function NotebookDetailModal({
             </div>
 
             <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4">
-              <div className="text-xs text-[var(--text-muted)] mb-1">Email</div>
+              <div className="text-xs text-[var(--text-muted)] mb-1">E-mail</div>
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4 text-[var(--text-muted)]" />
                 <span className="truncate">{email || "—"}</span>
@@ -125,13 +111,13 @@ export default function NotebookDetailModal({
           </div>
 
           {/* Observação / Movimentação */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4">
               <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold flex items-center gap-2">
                 <Info className="w-4 h-4 text-[var(--accent)]" />
                 Observação
               </div>
-              <p className="text-sm mt-2 text-[var(--text)]">
+              <p className="text-sm mt-2 text-[var(--text)] whitespace-pre-wrap">
                 {observacao || "—"}
               </p>
             </div>
@@ -141,7 +127,7 @@ export default function NotebookDetailModal({
                 <Cpu className="w-4 h-4 text-[var(--accent)]" />
                 Movimentação
               </div>
-              <p className="text-sm mt-2 text-[var(--text)]">
+              <p className="text-sm mt-2 text-[var(--text)] whitespace-pre-wrap">
                 {movimentacao || "—"}
               </p>
             </div>
@@ -176,31 +162,18 @@ export default function NotebookDetailModal({
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-[var(--line)] bg-[var(--bg-soft)]/60 flex justify-end gap-2">
-          <div className="flex items-center gap-2">
-            {typeof onDelete === "function" && (
-              <button
-                onClick={() => onDelete(notebook)}
-                className="px-4 py-2 rounded-lg border border-rose-500/40 text-rose-300
-                           hover:bg-rose-500/15 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={deleting}
-              >
-                Excluir
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
-                         hover:bg-white/5 transition"
-            >
-              Fechar
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
+                       hover:bg-white/5 transition"
+          >
+            Fechar
+          </button>
           {typeof onEdit === "function" && (
             <button
               onClick={() => onEdit(notebook)}
               className="px-4 py-2 rounded-lg border border-[var(--line)] text-white
                          bg-[var(--accent)] hover:brightness-105 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              disabled={deleting}
             >
               Editar
             </button>

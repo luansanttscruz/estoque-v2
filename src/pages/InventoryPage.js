@@ -80,8 +80,10 @@ export default function InventoryPage({
   const { usuario } = useAuth();
   const sidebar = useSidebar();
   const collapsed = sidebar?.collapsed ?? false;
-  const tableWidthClass = collapsed ? "max-w-[90rem]" : "max-w-7xl";
-  const cardsWidthClass = collapsed ? "max-w-[88rem]" : "max-w-6xl";
+  const tableWidthClass = collapsed
+    ? "max-w-[calc(100vw-8rem)]"
+    : "max-w-[calc(100vw-22rem)]";
+  const cardsWidthClass = "max-w-6xl";
 
   // ---- CARDS: contadores em tempo real quando NÃO há office/coleção ----
   const [counts, setCounts] = useState(() =>
@@ -166,7 +168,7 @@ export default function InventoryPage({
   // ======== VIEW 1: CARDS NEON (quando NÃO há office/collection) ========
   if (!collectionName) {
     return (
-      <div className={`mx-auto p-6 transition-all duration-200 ${cardsWidthClass}`}>
+      <div className={`mx-auto w-full p-6 transition-all duration-200 ${cardsWidthClass}`}>
         {/* Título */}
         <div className="flex items-center justify-center gap-2 text-[var(--text)] text-3xl font-bold mb-8">
           <span className="text-[var(--accent)] drop-shadow">
@@ -236,7 +238,7 @@ export default function InventoryPage({
   // ======== VIEW 2: TABELA (quando há office/collection) ========
   return (
     <div
-      className={`mx-auto px-4 transition-all duration-200 ${tableWidthClass}`}
+      className={`mx-auto w-full px-4 transition-all duration-200 ${tableWidthClass}`}
     >
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -362,8 +364,10 @@ export default function InventoryPage({
             setSelected(null);
           }}
           notebook={selected}
-          onDelete={(nb) => setConfirmDelete(nb)}
-          deleting={Boolean(deletingId)}
+          onEdit={(nb) => {
+            setEditNotebook(nb);
+            setModalOpen(false);
+          }}
         />
       )}
 
@@ -383,6 +387,11 @@ export default function InventoryPage({
           notebook={editNotebook}
           onClose={() => setEditNotebook(null)}
           collectionName={collectionName}
+          onDelete={(nb) => {
+            setEditNotebook(null);
+            setConfirmDelete(nb);
+          }}
+          deleting={Boolean(deletingId)}
         />
       )}
 
