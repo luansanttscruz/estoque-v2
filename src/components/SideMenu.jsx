@@ -125,7 +125,17 @@ export default function SideMenu({ collapsed = false }) {
             {dynamicOffices.map((office) => (
               <li key={office.slug}>
                 <Item
-                  to={`/equipment-movement/${office.slug}`}
+                  to={
+                    office.slug === "sao-paulo"
+                      ? "/sp"
+                      : office.slug === "rio-de-janeiro"
+                      ? "/rio"
+                      : office.slug === "joao-pessoa"
+                      ? "/jp"
+                      : office.slug === "outros"
+                      ? "/ou"
+                      : `/inventory?office=${encodeURIComponent(office.nome)}`
+                  }
                   label={office.nome}
                   Icon={Building2}
                 />
