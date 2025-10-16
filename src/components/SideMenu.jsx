@@ -29,7 +29,7 @@ export default function SideMenu({ collapsed = false }) {
   ];
 
   const extras = [
-    { to: "/licencas", label: "Licenças", icon: KeyRound },
+    { to: "/licenses", label: "Licenças", icon: KeyRound },
     { to: "/downloads", label: "Downloads", icon: Download },
     { to: "/settings", label: "Configurações", icon: Settings },
   ];

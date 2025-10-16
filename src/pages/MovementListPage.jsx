@@ -77,7 +77,9 @@ export default function MovementListPage({ office: officeProp }) {
   const { usuario } = useAuth();
   const sidebar = useSidebar();
   const collapsed = sidebar?.collapsed ?? false;
-  const containerWidthClass = collapsed ? "max-w-[90rem]" : "max-w-7xl";
+  const containerWidthClass = collapsed
+    ? "max-w-[calc(100vw-8rem)]"
+    : "max-w-[calc(100vw-22rem)]";
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -218,7 +220,7 @@ export default function MovementListPage({ office: officeProp }) {
   if (!office) {
     return (
       <div
-        className={`mx-auto px-4 mt-6 space-y-3 transition-all duration-200 ${containerWidthClass}`}
+      className={`mx-auto w-full px-4 mt-6 space-y-3 transition-all duration-200 ${containerWidthClass}`}
       >
         <div className="text-rose-300/90">
           <p>Selecione um escritório para visualizar as movimentações.</p>
@@ -240,7 +242,7 @@ export default function MovementListPage({ office: officeProp }) {
 
   return (
     <div
-      className={`mx-auto px-4 transition-all duration-200 ${containerWidthClass}`}
+      className={`mx-auto w-full px-4 transition-all duration-200 ${containerWidthClass}`}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
