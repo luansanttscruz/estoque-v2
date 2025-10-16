@@ -287,7 +287,7 @@ export default function MovementModal({
       const collectionName = officeToCollection(local || office);
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
-      const maintainStock = variant !== "inventory" && tipo !== "Saida";
+      const maintainStock = variant === "inventory" || tipo !== "Saida";
       const previousMaintained =
         previousTipo !== "Saida" && Boolean(previousSerial);
       const isSameLocation =
