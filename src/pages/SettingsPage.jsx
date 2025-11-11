@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useSidebar } from "../context/SidebarContext";
-import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 const DEFAULT_CONFIG = {
@@ -297,6 +297,8 @@ const PERIPHERAL_ICON_OPTIONS = [
   { value: "plug", label: "Cabos / Energia", Icon: Plug },
   { value: "server", label: "Racks / Servers", Icon: Server },
   { value: "tablet", label: "Tablets / Mobile", Icon: Tablet },
+  { value: "camera", label: "Câmeras", Icon: Monitor },
+  { value: "usb", label: "USB Hubs", Icon: Plug },
 ];
 
 const getPeripheralIconLabel = (icon) =>
@@ -371,6 +373,8 @@ export default function SettingsPage() {
   const [config, setConfig] = useState(() => buildConfigFromData());
   const [configLoaded, setConfigLoaded] = useState(false);
   const skipNextSave = useRef(true);
+  const [employees, setEmployees] = useState([]);
+  const [newEmployeeEmail, setNewEmployeeEmail] = useState("");
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -413,6 +417,36 @@ export default function SettingsPage() {
 
     return () => clearTimeout(timeout);
   }, [config, configLoaded, settingsDocRef]);
+
+  useEffect(() => {
+    const ensureDefaultAdmin = () =>
+      setDoc(
+        doc(db, "employees", "luan.cruz@vtex.com"),
+        { email: "luan.cruz@vtex.com", roleId: "admin" },
+        { merge: true }
+      ).catch(() => {});
+
+    ensureDefaultAdmin();
+
+    const employeesRef = collection(db, "employees");
+    const unsubscribe = onSnapshot(
+      employeesRef,
+      (snapshot) => {
+        const docs = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          email: docSnap.data()?.email || docSnap.id,
+          roleId: docSnap.data()?.roleId || "viewer",
+        }));
+        setEmployees(docs);
+      },
+      (error) => {
+        console.error("Não foi possível carregar colaboradores:", error);
+        setEmployees([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   const [newOffice, setNewOffice] = useState({
     nome: "",
@@ -666,6 +700,39 @@ export default function SettingsPage() {
         ),
       },
     }));
+  };
+
+  const handleAddEmployee = async (event) => {
+    event.preventDefault();
+    const email = newEmployeeEmail.trim().toLowerCase();
+    if (!email) return;
+    const defaultRoleId = config.roles[0]?.id || "viewer";
+    try {
+      await setDoc(
+        doc(db, "employees", email),
+        { email, roleId: defaultRoleId },
+        { merge: true }
+      );
+      setNewEmployeeEmail("");
+      showToast({ type: "success", message: "Colaborador adicionado." });
+    } catch (error) {
+      console.error("Erro ao adicionar colaborador:", error);
+      showToast({ type: "error", message: "Não foi possível adicionar colaborador." });
+    }
+  };
+
+  const handleUpdateEmployeeRole = async (email, roleId) => {
+    try {
+      await setDoc(
+        doc(db, "employees", email),
+        { email, roleId },
+        { merge: true }
+      );
+      showToast({ type: "success", message: "Papel atualizado." });
+    } catch (error) {
+      console.error("Erro ao atualizar papel:", error);
+      showToast({ type: "error", message: "Não foi possível atualizar papel." });
+    }
   };
 
   const handleAddRole = (event) => {
@@ -1065,13 +1132,90 @@ export default function SettingsPage() {
 
       <SectionCard
         icon={ShieldCheck}
-        title="Usuários & Acesso (RBAC)"
-        description="Área reservada para configuração detalhada de papéis e permissões."
+        title="Usuários & Acesso"
+        description="Defina papeis e gerencie os e-mails habilitados a acessar o sistema."
       >
-        <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-soft)]/60 px-4 py-5 text-sm text-[var(--text-muted)]">
-          Em breve você poderá gerenciar papéis, permissões e escalonamento de
-          acesso diretamente por aqui. Caso precise de ajustes imediatos,
-          continue utilizando os processos atuais.
+        <form
+          onSubmit={handleAddEmployee}
+          className="flex flex-col sm:flex-row gap-3 mb-4"
+        >
+          <label className="flex flex-1 flex-col gap-1 text-sm text-[var(--text-muted)]">
+            E-mail
+            <input
+              value={newEmployeeEmail}
+              onChange={(e) => setNewEmployeeEmail(e.target.value)}
+              className="input-neon"
+              placeholder="nome@vtex.com"
+              type="email"
+              required
+            />
+          </label>
+          <button
+            type="submit"
+            className="btn-neon flex items-center gap-2 justify-center"
+          >
+            <Plus className="w-4 h-4" />
+            Adicionar colaborador
+          </button>
+        </form>
+
+        <div className="overflow-hidden rounded-xl border border-[var(--line)]">
+          <table className="min-w-full text-sm">
+            <thead className="bg-[var(--bg-card)] text-[var(--text-muted)] uppercase tracking-wide text-xs">
+              <tr>
+                <th className="px-4 py-3 text-left">E-mail</th>
+                <th className="px-4 py-3 text-left">Papel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={2}
+                    className="px-4 py-4 text-center text-[var(--text-muted)]"
+                  >
+                    Nenhum colaborador cadastrado.
+                  </td>
+                </tr>
+              ) : (
+                employees.map((employee) => {
+                  const isAdmin = employee.email === "luan.cruz@vtex.com";
+                  return (
+                    <tr key={employee.id} className="border-t border-[var(--line)]">
+                      <td className="px-4 py-3 text-[var(--text)]">
+                        <span
+                          className={`inline-flex items-center gap-2 ${
+                            isAdmin ? "font-semibold text-[var(--accent)]" : ""
+                          }`}
+                        >
+                          {employee.email}
+                          {isAdmin && (
+                            <span className="rounded-full bg-[var(--accent)]/15 text-[var(--accent)] text-[11px] px-2 py-0.5 uppercase tracking-wide">
+                              Administrador
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={employee.roleId}
+                          onChange={(e) => handleUpdateEmployeeRole(employee.email, e.target.value)}
+                          className="input-neon"
+                          disabled={isAdmin}
+                        >
+                          {config.roles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </SectionCard>
 

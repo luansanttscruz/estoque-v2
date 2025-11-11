@@ -1,15 +1,136 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permite leitura/escrita apenas para usuários autenticados
-    match /{collection}/{document} {
-      allow read, write: if request.auth != null;
+
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    
-    // Opcional: Permite leitura pública de alguns dados (se necessário)
-    match /dados_publicos/{document} {
-      allow read: if true;
-      allow write: if request.auth != null;
+
+    function domainAllowed() {
+      return isAuthenticated()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('(?i)[^@]+@vtex\\.com$');
+    }
+
+    function officeAllowed(officeId) {
+      return officeId in ['sao-paulo', 'rio-de-janeiro', 'joao-pessoa', 'outros'];
+    }
+
+    match /userPreferences/{uid} {
+      allow read: if domainAllowed();
+      allow create, update: if isAuthenticated() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /licenses-machines/{serial} {
+      allow read: if domainAllowed();
+      allow create: if domainAllowed()
+        && request.resource.id == request.resource.data.serial
+        && request.resource.data.serial is string
+        && request.resource.data.machine is string
+        && request.resource.data.recoveryKey is string
+        && request.resource.data.createdAt is timestamp;
+      allow update: if domainAllowed()
+        && request.resource.id == resource.data.serial
+        && request.resource.data.serial == resource.data.serial
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.machine is string
+        && request.resource.data.recoveryKey is string;
+      allow delete: if domainAllowed();
+    }
+
+    match /equipment-movements/{docId} {
+      allow read: if domainAllowed();
+      allow create: if domainAllowed() && movementIsValid();
+      allow update: if domainAllowed() && movementIsValid()
+        && resource.data.criadoEm == request.resource.data.criadoEm;
+      allow delete: if domainAllowed();
+
+      function movementIsValid() {
+        return
+          (request.resource.data.tipo in ['Saida','Entrada']) &&
+          (request.resource.data.status in ['Pendente','Finalizado']) &&
+          (request.resource.data.disponibilidade in ['Disponível','Indisponível']) &&
+          (request.resource.data.data is string) &&
+          (request.resource.data.modelo is string) &&
+          (request.resource.data.numeroSerie is string) &&
+          (request.resource.data.responsavel is string) &&
+          (request.resource.data.local is string) &&
+          (request.resource.data.criadoEm is timestamp) &&
+          (!('obs' in request.resource.data) || request.resource.data.obs is string) &&
+          (!('email' in request.resource.data) || request.resource.data.email is string) &&
+          (!('fotoUrl' in request.resource.data) || request.resource.data.fotoUrl is string) &&
+          (!('fotoDriveLink' in request.resource.data) || request.resource.data.fotoDriveLink is string);
+      }
+    }
+
+    match /{officeId}/{serialId} {
+      allow read: if domainAllowed() && officeAllowed(officeId);
+      allow create: if domainAllowed() && officeAllowed(officeId)
+        && stockValid() && request.resource.id == request.resource.data.serial;
+      allow update: if domainAllowed() && officeAllowed(officeId)
+        && stockValid()
+        && request.resource.id == resource.data.serial
+        && request.resource.data.serial == resource.data.serial
+        && resource.data.createdAt == request.resource.data.createdAt;
+      allow delete: if domainAllowed() && officeAllowed(officeId);
+
+      function stockValid() {
+        return
+          (request.resource.data.serial is string) &&
+          (request.resource.data.modelo is string) &&
+          (request.resource.data.status in ['Disponivel','Indisponivel','Disponível','Indisponível']) &&
+          (request.resource.data.createdAt is timestamp) &&
+          (request.resource.data.updatedAt is timestamp) &&
+          (!('email' in request.resource.data) || request.resource.data.email is string) &&
+          (!('observacao' in request.resource.data) || request.resource.data.observacao is string) &&
+          (!('fotoUrl' in request.resource.data) || request.resource.data.fotoUrl is string) &&
+          (!('fotoDriveLink' in request.resource.data) || request.resource.data.fotoDriveLink is string);
+      }
+    }
+
+    match /peripherals/{docId} {
+      allow read: if domainAllowed();
+      allow create: if domainAllowed();
+      allow update: if domainAllowed();
+      allow delete: if domainAllowed();
+    }
+
+    match /appSettings/{docId} {
+      allow read: if domainAllowed();
+      allow create: if false;
+      allow update: if domainAllowed() && docId == 'global';
+    }
+
+    match /employees/{uid} {
+      allow read: if domainAllowed();
+      allow write: if false;
+    }
+
+    // Weekly tasks por usuário: coleção "weeklytasks-{uid}"
+    match /weeklytasks-{userId}/{taskId} {
+      allow read: if domainAllowed() && request.auth.uid == userId;
+      allow create: if domainAllowed()
+        && request.auth.uid == userId
+        && isValidWeeklyTask(request.resource.data);
+      allow update: if domainAllowed()
+        && request.auth.uid == userId
+        && isValidWeeklyTask(request.resource.data);
+      allow delete: if domainAllowed() && request.auth.uid == userId;
+
+      function isValidWeeklyTask(d) {
+        return
+          (d.atividade is string) &&
+          (d.responsavel is string) &&
+          (d.prioridade in ['Baixa','Média','Alta']) &&
+          (d.data is string) &&
+          (d.status in ['pendente','andamento','concluida']) &&
+          (d.criadoEm is string);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
