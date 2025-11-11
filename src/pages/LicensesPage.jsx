@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   onSnapshot,
   orderBy,
   query,
+  setDoc,
 } from "firebase/firestore";
 import { KeyRound, Laptop, PlusCircle, Trash2, Copy, Hash } from "lucide-react";
 import { db } from "../firebase";
@@ -22,7 +22,10 @@ export default function LicensesPage() {
 
   useEffect(() => {
     const licensesRef = collection(db, COLLECTION_NAME);
-    const q = query(licensesRef, orderBy("machine", "asc"));
+    const q = query(
+      licensesRef,
+      orderBy("machine", "asc")
+    );
 
     const unsub = onSnapshot(
       q,
@@ -37,10 +40,6 @@ export default function LicensesPage() {
       },
       (error) => {
         console.error("Erro ao carregar licenças:", error);
-        showToast({
-          type: "error",
-          message: "Não foi possível carregar as licenças.",
-        });
         setLoading(false);
       }
     );
@@ -74,7 +73,7 @@ export default function LicensesPage() {
     }
 
     try {
-      await addDoc(collection(db, COLLECTION_NAME), {
+      await setDoc(doc(db, COLLECTION_NAME, serial), {
         machine,
         serial,
         recoveryKey,

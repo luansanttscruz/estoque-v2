@@ -89,15 +89,23 @@ const sanitizeCategories = (raw) => {
           ? "mouse"
           : lower.includes("printer") || lower.includes("impress")
           ? "printer"
-          : lower.includes("router") || lower.includes("modem") || lower.includes("wifi")
+          : lower.includes("router") ||
+            lower.includes("modem") ||
+            lower.includes("wifi")
           ? "router"
-          : lower.includes("cabo") || lower.includes("energia") || lower.includes("plug")
+          : lower.includes("cabo") ||
+            lower.includes("energia") ||
+            lower.includes("plug")
           ? "plug"
-          : lower.includes("storage") || lower.includes("dock") || lower.includes("hd")
+          : lower.includes("storage") ||
+            lower.includes("dock") ||
+            lower.includes("hd")
           ? "hard-drive"
           : lower.includes("server") || lower.includes("rack")
           ? "server"
-          : lower.includes("tablet") || lower.includes("mobile") || lower.includes("phone")
+          : lower.includes("tablet") ||
+            lower.includes("mobile") ||
+            lower.includes("phone")
           ? "tablet"
           : "headphones";
         return {
@@ -139,7 +147,9 @@ const createEmptyStats = (categories) =>
 
 export default function PeripheralsPage() {
   const [categories, setCategories] = useState(() => DEFAULT_CATEGORIES);
-  const [stats, setStats] = useState(() => createEmptyStats(DEFAULT_CATEGORIES));
+  const [stats, setStats] = useState(() =>
+    createEmptyStats(DEFAULT_CATEGORIES)
+  );
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -440,10 +450,11 @@ export default function PeripheralsPage() {
     const csv = [head, ...rows]
       .map((cols) =>
         cols
-          .map((value) =>
-            `"${String(value ?? "")
-              .replace(/"/g, '""')
-              .replace(/\r?\n/g, " ")}"`
+          .map(
+            (value) =>
+              `"${String(value ?? "")
+                .replace(/"/g, '""')
+                .replace(/\r?\n/g, " ")}"`
           )
           .join(",")
       )
@@ -453,9 +464,7 @@ export default function PeripheralsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `peripherals_${new Date()
-      .toISOString()
-      .split("T")[0]}.csv`;
+    link.download = `peripherals_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
