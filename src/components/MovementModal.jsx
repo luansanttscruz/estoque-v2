@@ -288,6 +288,7 @@ export default function MovementModal({
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
       const maintainStock = variant === "inventory" || tipo !== "Saida";
+      let existingStockSnapshot = null;
       const previousMaintained =
         previousTipo !== "Saida" && Boolean(previousSerial);
       const isSameLocation =
@@ -311,8 +312,8 @@ export default function MovementModal({
           }
         }
 
-        const existingStock = await getDoc(currentStockRef);
-        if (existingStock.exists() && !isSameLocation) {
+        existingStockSnapshot = await getDoc(currentStockRef);
+        if (existingStockSnapshot.exists() && !isSameLocation) {
           showToast({
             type: "error",
             message:
@@ -337,6 +338,8 @@ export default function MovementModal({
       // payload base
       const sanitizedObs = (obs || "").trim();
 
+      const createdAtValue = editMovement?.criadoEm || editMovement?.createdAt || Timestamp.now();
+
       const payload = {
         data,
         tipo,
@@ -346,7 +349,7 @@ export default function MovementModal({
         local,
         obs: sanitizedObs,
         disponibilidade,
-        criadoEm: Timestamp.now(),
+        criadoEm: createdAtValue,
         ...(email ? { email } : {}),
         status:
           variant !== "inventory"
@@ -380,6 +383,9 @@ export default function MovementModal({
       }
 
       if (maintainStock) {
+        const createdAtStock = existingStockSnapshot?.exists()
+          ? existingStockSnapshot.data()?.createdAt || Timestamp.now()
+          : Timestamp.now();
         await setDoc(currentStockRef, {
           serial: normalizedNumero,
           modelo: normalizedModelo,
@@ -388,7 +394,7 @@ export default function MovementModal({
           createdBy: usuario?.email || responsavel,
           updatedBy: usuario?.email || responsavel,
           observacao: sanitizedObs,
-          createdAt: Timestamp.now(),
+          createdAt: createdAtStock,
           updatedAt: Timestamp.now(),
         });
       } else {
@@ -453,7 +459,7 @@ export default function MovementModal({
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 30 }}
           transition={{ type: "spring", stiffness: 300, damping: 24 }}
-          className="modal-card w-full max-w-3xl overflow-hidden"
+          className="modal-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
         >
           {/* Cabeçalho */}
           <div className="modal-head px-6 py-4 flex items-center justify-between">
@@ -483,7 +489,7 @@ export default function MovementModal({
           </div>
 
           {/* Conteúdo */}
-          <div className="p-6 space-y-6 bg-[var(--bg-soft)]">
+          <div className="p-6 space-y-6 bg-[var(--bg-soft)] flex-1 min-h-0 overflow-y-auto">
             <form onSubmit={handleSave} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

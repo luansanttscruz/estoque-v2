@@ -61,9 +61,9 @@ export default function DownloadsPage() {
       </section>
 
       <section className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--bg-soft)] p-6 text-sm text-[var(--text-muted)]">
-        Personalize esta sessão com instruções, versões e changelog dos
-        arquivos futuramente. Inclua também checklist de pré-requisitos ou
-        observações importantes para a equipe.
+        Personalize esta sessão com instruções, versões e changelog dos arquivos
+        futuramente. Inclua também checklist de pré-requisitos ou observações
+        importantes.
       </section>
     </div>
   );

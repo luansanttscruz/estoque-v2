@@ -45,7 +45,13 @@ function Layout({ children }) {
       return false;
     }
   });
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("app:theme") === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
   const [themeReady, setThemeReady] = useState(false);
   const lastSyncedTheme = useRef(null);
 
@@ -57,12 +63,14 @@ function Layout({ children }) {
 
   useEffect(() => {
     if (!usuario?.uid) {
-      lastSyncedTheme.current = "dark";
-      setTheme("dark");
+      lastSyncedTheme.current = null;
       setThemeReady(true);
-      const root = document.documentElement;
-      root.classList.remove("theme-dark", "theme-light");
-      root.classList.add("theme-dark");
+      try {
+        const stored = localStorage.getItem("app:theme");
+        if (stored === "light" || stored === "dark") {
+          setTheme(stored);
+        }
+      } catch {}
       return undefined;
     }
 
@@ -93,6 +101,10 @@ function Layout({ children }) {
   }, [usuario?.uid]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem("app:theme", theme);
+    } catch {}
+
     if (!usuario?.uid) return;
     if (!themeReady) return;
     if (lastSyncedTheme.current === theme) return;
