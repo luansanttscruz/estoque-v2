@@ -22,15 +22,15 @@ const OFFICES = [
 
 export default function EquipmentMovement() {
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="flex items-center justify-center gap-2 text-[var(--text)] text-3xl font-bold mb-8">
-        <span className="text-[var(--accent)] drop-shadow">
+    <div className="max-w-6xl mx-auto px-4 py-5 sm:p-6">
+      <div className="flex flex-col items-center gap-2 text-center text-[var(--text)] mb-6 sm:mb-8">
+        <span className="text-2xl sm:text-3xl font-bold drop-shadow text-[var(--accent)]">
           Equipment Movement
         </span>
-        <Building2 className="w-8 h-8 text-pink-400" />
+        <Building2 className="w-7 h-7 sm:w-8 sm:h-8 text-pink-400" />
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
         {OFFICES.map((office, i) => (
           <motion.div
             key={office.nome}
@@ -49,7 +49,7 @@ export default function EquipmentMovement() {
 
             <Link
               to={office.path}
-              className="relative flex items-center gap-4 p-6"
+              className="relative flex items-center gap-4 p-5 sm:p-6"
             >
               <div
                 className="bg-pink-100/10 ring-1 ring-pink-500/30 text-pink-300 p-3 rounded-full

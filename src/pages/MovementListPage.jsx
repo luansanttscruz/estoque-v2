@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import MovementModal from "../components/MovementModal";
@@ -69,8 +69,7 @@ const formatDateTime = (value) => {
   }
 };
 
-const escapeCsv = (value) =>
-  `"${String(value ?? "").replace(/"/g, '""')}"`;
+const escapeCsv = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 export default function MovementListPage({ office: officeProp }) {
   const office = useResolvedOffice(officeProp);
@@ -78,14 +77,24 @@ export default function MovementListPage({ office: officeProp }) {
   const sidebar = useSidebar();
   const collapsed = sidebar?.collapsed ?? false;
   const containerWidthClass = collapsed
-    ? "max-w-[calc(100vw-8rem)]"
-    : "max-w-[calc(100vw-22rem)]";
+    ? "max-w-[calc(100vw-2rem)] xl:max-w-7xl 2xl:max-w-[1400px]"
+    : "max-w-[calc(100vw-16rem)] xl:max-w-6xl 2xl:max-w-[1250px]";
+  const location = useLocation();
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busca, setBusca] = useState("");
+  const [busca, setBusca] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("serial") || params.get("q") || "";
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [editMovement, setEditMovement] = useState(null);
   const [historySerial, setHistorySerial] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const serial = params.get("serial") || params.get("q") || "";
+    if (serial) setBusca(serial);
+  }, [location.search]);
 
   useEffect(() => {
     if (!office) {
@@ -220,7 +229,7 @@ export default function MovementListPage({ office: officeProp }) {
   if (!office) {
     return (
       <div
-      className={`mx-auto w-full px-4 mt-6 space-y-3 transition-all duration-200 ${containerWidthClass}`}
+        className={`mx-auto w-full px-4 mt-6 space-y-3 transition-all duration-200 ${containerWidthClass}`}
       >
         <div className="text-rose-300/90">
           <p>Selecione um escritório para visualizar as movimentações.</p>
@@ -230,8 +239,7 @@ export default function MovementListPage({ office: officeProp }) {
               <code>/equipment-movement/sp</code>
               <code>/equipment-movement/rio</code>
               <code>/equipment-movement/jp</code>
-            </span>
-            {" "}
+            </span>{" "}
             ou informe via query string como
             <code className="ml-2">/equipment-movement?office=São Paulo</code>.
           </p>
@@ -242,12 +250,17 @@ export default function MovementListPage({ office: officeProp }) {
 
   return (
     <div
-      className={`mx-auto w-full px-4 transition-all duration-200 ${containerWidthClass}`}
+      className={`mx-auto w-full px-3 sm:px-4 transition-all duration-200 ${containerWidthClass}`}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-semibold text-[var(--text)]">
-            <span className="text-[var(--accent)]">{office}</span>{" "}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="space-y-1 text-center sm:text-left">
+          <h2 className="text-2xl sm:text-3xl font-semibold text-[var(--text)] leading-tight">
+            <Link
+              to="/equipment-movement"
+              className="text-[var(--accent)] hover:underline"
+            >
+              {office}
+            </Link>{" "}
             <span className="text-[var(--text-muted)]">- Movimentações</span>
           </h2>
           <p className="text-sm text-[var(--text-muted)]">
@@ -255,8 +268,8 @@ export default function MovementListPage({ office: officeProp }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-pink-300/90">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <span className="text-sm text-pink-300/90 text-center sm:text-left">
             {loading
               ? "Carregando…"
               : `${filteredMovements.length} registro${
@@ -267,32 +280,123 @@ export default function MovementListPage({ office: officeProp }) {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por serial, responsável, modelo…"
-            className="px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--line)]
+            className="px-3 py-2 rounded-lg bg-[var(--bg-card)] border border-[var(--line)]
                        text-[var(--text)] placeholder:text-[var(--text-muted)]
-                       focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                       focus:outline-none focus:ring-2 focus:ring-[var(--accent)] w-full sm:w-72"
           />
-          <button
-            onClick={handleExport}
-            disabled={!filteredMovements.length}
-            className="inline-flex items-center gap-1 text-sm text-emerald-300/90 border border-emerald-400/40
-                       px-3 py-1.5 rounded-lg hover:bg-emerald-400/10 transition disabled:opacity-40"
-          >
-            <Download className="w-4 h-4" />
-            Exportar
-          </button>
-          <button
-            onClick={handleNew}
-            className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg
-                       bg-[var(--accent)]/10 text-[var(--accent)]
-                       border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition"
-          >
-            <Plus className="w-4 h-4" />
-            Nova movimentação
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleExport}
+              disabled={!filteredMovements.length}
+              className="inline-flex items-center justify-center gap-1 text-sm text-emerald-300/90 border border-emerald-400/40
+                         px-3 py-2 rounded-lg hover:bg-emerald-400/10 transition disabled:opacity-40"
+            >
+              <Download className="w-4 h-4" />
+              Exportar
+            </button>
+            <button
+              onClick={handleNew}
+              className="inline-flex items-center justify-center gap-1 text-sm px-3 py-2 rounded-lg
+                         bg-[var(--accent)]/10 text-[var(--accent)]
+                         border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition"
+            >
+              <Plus className="w-4 h-4" />
+              Nova movimentação
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg-card)]">
+      {/* Lista em cards para mobile */}
+      <div className="space-y-3 md:hidden">
+        {loading ? (
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4 text-center text-[var(--text-muted)]">
+            Carregando movimentações…
+          </div>
+        ) : filteredMovements.length === 0 ? (
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4 text-center text-[var(--text-muted)]">
+            Nenhuma movimentação encontrada.
+          </div>
+        ) : (
+          filteredMovements.map((mov) => (
+            <button
+              key={mov.id || mov.numeroSerie}
+              onClick={() => handleEdit(mov)}
+              className="w-full text-left rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4 shadow-sm hover:border-[var(--accent)]/60 transition"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text)]">
+                    {formatDate(mov.data)}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                      mov.tipo === "Entrada"
+                        ? "bg-green-500/15 text-green-300"
+                        : "bg-red-500/15 text-red-300"
+                    }`}
+                  >
+                    {mov.tipo || "—"}
+                  </span>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                    mov.status === "Finalizado"
+                      ? "bg-green-500/15 text-green-300"
+                      : "bg-yellow-400/15 text-yellow-300"
+                  }`}
+                >
+                  {mov.status || "—"}
+                </span>
+              </div>
+              <div className="space-y-1 text-sm text-[var(--text)]">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Modelo</span>
+                  <span className="font-medium text-right">
+                    {mov.modelo || "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Nº de série</span>
+                  <span className="font-medium text-right">
+                    {mov.numeroSerie || "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Responsável</span>
+                  <span className="text-right max-w-[55%] truncate">
+                    {mov.responsavel || "—"}
+                  </span>
+                </div>
+                {mov.obs ? (
+                  <p className="text-[var(--text-muted)] text-xs leading-snug line-clamp-2">
+                    {mov.obs}
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                    mov.disponibilidade === "Disponível"
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-red-500/15 text-red-300"
+                  }`}
+                >
+                  {mov.disponibilidade || "—"}
+                </span>
+                {mov.email && (
+                  <span className="text-[var(--text-muted)] text-xs truncate">
+                    {mov.email}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* Tabela desktop */}
+      <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--bg-card)] hidden md:block">
         <table className="min-w-full text-sm">
           <thead className="bg-[var(--accent-weak)]/40 text-[var(--text)]">
             <tr className="text-left">

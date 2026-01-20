@@ -884,7 +884,8 @@ export default function SettingsPage() {
           </label>
           <button
             type="submit"
-            className="btn-neon flex items-center gap-2 justify-center"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
+                       px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
           >
             <Plus className="w-4 h-4" />
             Adicionar categoria
@@ -1013,7 +1014,8 @@ export default function SettingsPage() {
           </label>
           <button
             type="submit"
-            className="btn-neon flex items-center justify-center gap-2"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
+                       px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
           >
             <Plus className="w-4 h-4" />
             Adicionar
@@ -1148,7 +1150,8 @@ export default function SettingsPage() {
               </label>
               <button
                 type="submit"
-                className="btn-neon flex items-center gap-2 justify-center"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
+                           px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
               >
                 <Tag className="w-4 h-4" />
                 Adicionar status
@@ -1175,7 +1178,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div>
+          <div id="notebook-models" className="scroll-mt-24">
             <h3 className="text-sm font-semibold text-[var(--text)] mb-2">
               Modelos disponíveis
             </h3>
@@ -1194,7 +1197,8 @@ export default function SettingsPage() {
               </label>
               <button
                 type="submit"
-                className="btn-neon flex items-center gap-2 justify-center"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
+                           px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
               >
                 <Cpu className="w-4 h-4" />
                 Adicionar modelo

@@ -1,20 +1,21 @@
 // src/components/Navbar.jsx
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { Laptop, LogOut, User } from "lucide-react";
+import { Laptop, LogOut, User, Menu as MenuIcon } from "lucide-react";
 
-export default function Navbar() {
-  const navigate = useNavigate();
+const DRIVE_TOKEN_KEY = "googleDriveAccessToken";
+
+export default function Navbar({ onOpenMenu }) {
   const { usuario } = useAuth();
   const [erroImg, setErroImg] = useState(false);
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem(DRIVE_TOKEN_KEY);
       await signOut(auth);
-      navigate("/login");
     } catch (error) {
       console.error("Erro ao sair:", error);
     }
@@ -22,7 +23,19 @@ export default function Navbar() {
 
   return (
     <header className="h-14 w-full border-b border-[var(--line)] bg-[var(--bg-soft)] text-[var(--text)]">
-      <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
+      <div className="h-full max-w-7xl mx-auto px-3 sm:px-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {onOpenMenu && (
+            <button
+              type="button"
+              onClick={onOpenMenu}
+              className="md:hidden inline-flex items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--bg-card)] p-2 text-[var(--text)] hover:bg-white/5 transition"
+              aria-label="Abrir menu"
+            >
+              <MenuIcon className="w-4 h-4" />
+            </button>
+          )}
+
         {/* Marca */}
         <Link
           to="/"
@@ -31,6 +44,7 @@ export default function Navbar() {
           <Laptop className="w-5 h-5 text-[var(--accent)]" />
           <span>IT Operations</span>
         </Link>
+        </div>
 
         {/* Usuário / Ações */}
         {usuario ? (

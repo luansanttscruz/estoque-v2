@@ -29,8 +29,9 @@ import SettingsPage from "./pages/SettingsPage";
 import LicensesPage from "./pages/LicensesPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import PeripheralsPage from "./pages/PeripheralsPage";
+import UsersPage from "./pages/UsersPage";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
@@ -48,6 +49,7 @@ function Layout({ children }) {
   const [theme, setTheme] = useState("dark");
   const [themeReady, setThemeReady] = useState(false);
   const lastSyncedTheme = useRef(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -140,11 +142,38 @@ function Layout({ children }) {
         }}
       />
       <div className="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text)]">
-        <Navbar />
-        <div className="flex flex-1">
-          {/* Sidebar fixa */}
+        <Navbar onOpenMenu={() => setMobileMenuOpen(true)} />
+        <div className="flex flex-1 relative">
+          {/* Drawer mobile */}
+          <div
+            className={`fixed inset-0 z-30 md:hidden transition-opacity duration-200 ${
+              mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            }`}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" />
+            <div
+              className={`absolute inset-y-0 left-0 w-[260px] max-w-[80vw] bg-[var(--bg-soft)] border-r border-[var(--line)] shadow-2xl transform transition-transform duration-200 ${
+                mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-end p-3">
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-full border border-[var(--line)] bg-[var(--bg-card)] p-1.5 text-[var(--text)] hover:bg-white/5 transition"
+                  aria-label="Fechar menu"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <SideMenu collapsed={false} />
+            </div>
+          </div>
+
+          {/* Sidebar fixa (desktop) */}
           <aside
-            className={`relative border-r border-[var(--line)] bg-[var(--bg-soft)] transition-[width] duration-200 ${
+            className={`relative border-r border-[var(--line)] bg-[var(--bg-soft)] transition-[width] duration-200 hidden md:block ${
               collapsed ? "w-16" : "w-[260px]"
             }`}
           >
@@ -166,7 +195,7 @@ function Layout({ children }) {
           </aside>
 
           {/* Conteúdo */}
-          <main className="flex-1 p-4 transition-[max-width] duration-200 ease-in-out">
+          <main className="flex-1 p-3 sm:p-5 lg:p-6 transition-[max-width] duration-200 ease-in-out">
             {children}
           </main>
         </div>
@@ -346,6 +375,15 @@ function App() {
             }
           />
           <Route path="/config" element={<Navigate to="/settings" replace />} />
+          <Route
+            path="/users"
+            element={
+              <RotaPrivada>
+                <UsersPage />
+              </RotaPrivada>
+            }
+          />
+          <Route path="/usuarios" element={<Navigate to="/users" replace />} />
         </Routes>
       </AuthProvider>
     </Router>

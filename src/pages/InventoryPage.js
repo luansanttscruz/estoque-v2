@@ -1,7 +1,15 @@
 // src/pages/InventoryPage.js
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, Link } from "react-router-dom";
-import { collection, onSnapshot, orderBy, query, deleteDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  deleteDoc,
+  doc,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import NotebookDetailModal from "../components/NotebookDetailModal";
 import NotebookEditModal from "../components/NotebookEditModal";
@@ -11,6 +19,12 @@ import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useSidebar } from "../context/SidebarContext";
 import showToast from "../utils/showToast";
+import {
+  getTime,
+  normalizeSerial,
+  parseAvailability,
+  resolveAvailability,
+} from "../utils/availability";
 
 // Mapeamento fixo -> coleção do Firestore
 const MAP_OFFICE_TO_COLLECTION = {
@@ -70,6 +84,7 @@ export default function InventoryPage({
   );
 
   const [items, setItems] = useState([]);
+  const [movementBySerial, setMovementBySerial] = useState({});
   const [busca, setBusca] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -99,8 +114,8 @@ export default function InventoryPage({
       onSnapshot(collection(db, colecao), (snap) => {
         const total = snap.size;
         const disponiveis = snap.docs.reduce((acc, d) => {
-          const st = String(d.data()?.status || "").toLowerCase();
-          return acc + (st === "disponivel" ? 1 : 0);
+          const availability = parseAvailability(d.data()?.status);
+          return acc + (availability?.ok ? 1 : 0);
         }, 0);
         setCounts((prev) => ({ ...prev, [nome]: { total, disponiveis } }));
       })
@@ -120,6 +135,58 @@ export default function InventoryPage({
     });
     return () => unsub();
   }, [collectionName]);
+
+  useEffect(() => {
+    if (!collectionName) {
+      setMovementBySerial({});
+      return undefined;
+    }
+    const movementsRef = collection(db, "equipment-movements");
+    const movementQuery = office
+      ? query(movementsRef, where("local", "==", office))
+      : movementsRef;
+    const unsub = onSnapshot(movementQuery, (snap) => {
+      const latest = {};
+      const upsertEntry = (serialValue, entry, base) => {
+        const serialKey = normalizeSerial(serialValue);
+        if (!serialKey) return;
+        const recordedAt =
+          entry?.registradoEm ||
+          entry?.criadoEm ||
+          base?.criadoEm ||
+          entry?.data ||
+          base?.data;
+        const time = getTime(recordedAt);
+        const current = latest[serialKey];
+        if (current && current.time >= time) return;
+        latest[serialKey] = {
+          time,
+          disponibilidade: entry?.disponibilidade || base?.disponibilidade,
+          status: entry?.status || base?.status,
+          local: entry?.local || base?.local,
+        };
+      };
+
+      snap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        const historico = Array.isArray(data.historico) ? data.historico : [];
+        const serialValue = data.numeroSerie || data.serial;
+
+        if (historico.length) {
+          historico.forEach((entry) => {
+            const entrySerial =
+              entry?.numeroSerie || serialValue || entry?.serial;
+            upsertEntry(entrySerial, entry, data);
+          });
+        } else {
+          upsertEntry(serialValue, data, data);
+        }
+      });
+
+      setMovementBySerial(latest);
+    });
+    return () => unsub();
+  }, [collectionName, office]);
 
   // Filtro local
   const filtered = useMemo(() => {
@@ -243,7 +310,9 @@ export default function InventoryPage({
       {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h2 className="text-2xl font-semibold text-[var(--text)]">
-          <span className="text-[var(--accent)]">{office}</span>{" "}
+          <Link to="/inventory" className="text-[var(--accent)] hover:underline">
+            {office}
+          </Link>{" "}
           <span className="text-[var(--text-muted)]">- Notebooks</span>
         </h2>
         <div className="flex items-center flex-wrap gap-3">
@@ -303,54 +372,65 @@ export default function InventoryPage({
                 </td>
               </tr>
             ) : (
-              filtered.map((it) => (
-                <tr
-                  key={it.id || it.serial}
-                  onClick={() => {
-                    setSelected(it);
-                    setModalOpen(true);
-                  }}
-                  className="border-t border-[var(--line)] hover:bg-[var(--rowHover)] transition cursor-pointer"
-                >
-                  <td className="p-3">{it.serial}</td>
-                  <td className="p-3">{it.modelo}</td>
-                  <td className="p-3">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          String(it.status || "").toLowerCase() === "disponivel"
-                            ? "bg-emerald-400"
-                            : "bg-rose-400"
-                        }`}
-                      />
-                      {String(it.status || "").toLowerCase() === "disponivel"
-                        ? "Disponível"
-                        : "Indisponível"}
-                    </span>
-                  </td>
-                  <td className="p-3">{it.email || "—"}</td>
-                  <td className="p-3">{it.observacao || "—"}</td>
-                  <td className="p-3">
-                    {it.createdAt?.toDate?.()?.toLocaleDateString?.("pt-BR") ||
-                      "—"}
-                  </td>
-                  {/* Ações não disparam a modal */}
-                  <td
-                    className="p-3 text-center"
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
+              filtered.map((it) => {
+                const serialKey = normalizeSerial(it.serial);
+                const movement = movementBySerial[serialKey];
+                const availability = resolveAvailability({
+                  stockStatus: it.status,
+                  stockTime: getTime(it.updatedAt || it.createdAt),
+                  movementStatus: movement?.disponibilidade,
+                  movementTime: movement?.time,
+                });
+                const availabilityLabel = availability?.label || it.status || "—";
+                const availabilityOk = availability?.ok;
+                const statusDot =
+                  availabilityOk === true
+                    ? "bg-emerald-400"
+                    : availabilityOk === false
+                    ? "bg-rose-400"
+                    : "bg-slate-400";
+
+                return (
+                  <tr
+                    key={it.id || it.serial}
+                    onClick={() => {
+                      setSelected(it);
+                      setModalOpen(true);
+                    }}
+                    className="border-t border-[var(--line)] hover:bg-[var(--rowHover)] transition cursor-pointer"
                   >
-                    <button
-                      onClick={() => setEditNotebook(it)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--line)]
-                                 text-[var(--text)] hover:bg-white/5 transition"
+                    <td className="p-3">{it.serial}</td>
+                    <td className="p-3">{it.modelo}</td>
+                    <td className="p-3">
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${statusDot}`} />
+                        {availabilityLabel}
+                      </span>
+                    </td>
+                    <td className="p-3">{it.email || "—"}</td>
+                    <td className="p-3">{it.observacao || "—"}</td>
+                    <td className="p-3">
+                      {it.createdAt?.toDate?.()?.toLocaleDateString?.("pt-BR") ||
+                        "—"}
+                    </td>
+                    {/* Ações não disparam a modal */}
+                    <td
+                      className="p-3 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                     >
-                      <Pencil className="w-4 h-4 text-[var(--accent)]" />
-                      Editar
-                    </button>
-                  </td>
-                </tr>
-              ))
+                      <button
+                        onClick={() => setEditNotebook(it)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--line)]
+                                 text-[var(--text)] hover:bg-white/5 transition"
+                      >
+                        <Pencil className="w-4 h-4 text-[var(--accent)]" />
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -364,6 +444,7 @@ export default function InventoryPage({
             setSelected(null);
           }}
           notebook={selected}
+          office={office}
           onEdit={(nb) => {
             setEditNotebook(nb);
             setModalOpen(false);

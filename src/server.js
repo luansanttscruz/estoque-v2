@@ -2,9 +2,12 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const multer = require("multer");
+const { google } = require("googleapis");
+const { Readable } = require("stream");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const { gerarXmlCotacao } = require("./api/cotacao-dhl/dhlProxy");
+const { gerarXmlCotacao } = require("../api/cotacao-dhl/dhlProxy");
 
 // Carregar variáveis do .env
 dotenv.config();
@@ -12,9 +15,109 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"];
+const DRIVE_BASE_FOLDER_ID =
+  process.env.GOOGLE_DRIVE_BASE_FOLDER_ID ||
+  "1cTYLAyW4_MElse2WCJuesP1UWE3OhPrY";
+const DRIVE_WEBAPP_API_KEY = process.env.DRIVE_WEBAPP_API_KEY || "";
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+let driveClient;
+
+const getServiceAccount = () => {
+  if (process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) {
+    try {
+      return JSON.parse(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON);
+    } catch (error) {
+      throw new Error("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON inválido.");
+    }
+  }
+
+  if (!process.env.GOOGLE_DRIVE_CLIENT_EMAIL) return null;
+
+  return {
+    client_email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_DRIVE_PRIVATE_KEY,
+  };
+};
+
+const getDriveClient = () => {
+  if (driveClient) return driveClient;
+
+  const serviceAccount = getServiceAccount();
+  if (!serviceAccount?.client_email || !serviceAccount?.private_key) {
+    throw new Error(
+      "Credenciais do Drive ausentes. Configure GOOGLE_DRIVE_CLIENT_EMAIL e GOOGLE_DRIVE_PRIVATE_KEY."
+    );
+  }
+
+  const privateKey = serviceAccount.private_key.includes("\\n")
+    ? serviceAccount.private_key.replace(/\\n/g, "\n")
+    : serviceAccount.private_key;
+
+  const auth = new google.auth.JWT({
+    email: serviceAccount.client_email,
+    key: privateKey,
+    scopes: DRIVE_SCOPES,
+  });
+
+  driveClient = google.drive({ version: "v3", auth });
+  return driveClient;
+};
+
+const escapeQuery = (value) => String(value || "").replace(/'/g, "\\'");
+
+const buildFolderName = (serial, email) => {
+  const baseSerial = String(serial || "").trim();
+  if (!baseSerial) return "";
+  const baseEmail = String(email || "").trim();
+  const rawName = baseEmail ? `${baseSerial} - ${baseEmail}` : baseSerial;
+  return rawName.replace(/[\\/]/g, "-").replace(/\s+/g, " ").trim();
+};
+
+const findFolderId = async (drive, folderName) => {
+  const safeName = escapeQuery(folderName);
+  const q = [
+    `'${DRIVE_BASE_FOLDER_ID}' in parents`,
+    "trashed = false",
+    "mimeType = 'application/vnd.google-apps.folder'",
+    `name = '${safeName}'`,
+  ].join(" and ");
+
+  const response = await drive.files.list({
+    q,
+    fields: "files(id,name)",
+    corpora: "allDrives",
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true,
+  });
+
+  return response.data.files?.[0]?.id || null;
+};
+
+const ensureFolderId = async (drive, folderName) => {
+  const existing = await findFolderId(drive, folderName);
+  if (existing) return existing;
+
+  const created = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [DRIVE_BASE_FOLDER_ID],
+    },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+
+  return created.data.id;
+};
+
 // Middlewares
 app.use(cors());
-app.use(express.json()); // Agora aceita JSON direto!
+app.use(express.json({ limit: "20mb" })); // Agora aceita JSON direto!
 
 // 📋 Rota de teste para confirmar que o servidor está funcionando
 app.post("/api/teste", (req, res) => {
@@ -64,6 +167,208 @@ app.post("/api/cotacao-dhl", async (req, res) => {
   } catch (error) {
     console.error("Erro na cotação DHL:", error);
     res.status(500).send("Erro interno ao cotar.");
+  }
+});
+
+// 📎 Proxy para Apps Script (Drive Web App)
+app.all("/api/drive-webapp", async (req, res) => {
+  const webAppUrl =
+    process.env.DRIVE_WEBAPP_URL || process.env.REACT_APP_DRIVE_WEBAPP_URL;
+  if (!webAppUrl) {
+    return res.status(500).json({ erro: "DRIVE_WEBAPP_URL não configurada." });
+  }
+  if (!DRIVE_WEBAPP_API_KEY) {
+    return res
+      .status(500)
+      .json({ erro: "DRIVE_WEBAPP_API_KEY não configurada." });
+  }
+
+  try {
+    const forward = async (url, options = {}) => {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          Accept: "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      const contentType = response.headers.get("content-type") || "";
+      const text = await response.text();
+      return { response, contentType, text };
+    };
+
+    if (req.method === "GET") {
+      const paramsObj = new URLSearchParams(req.query);
+      paramsObj.set("apiKey", DRIVE_WEBAPP_API_KEY);
+      const params = paramsObj.toString();
+      const { response, contentType, text } = await forward(
+        params ? `${webAppUrl}?${params}` : webAppUrl
+      );
+
+      if (!contentType.includes("application/json")) {
+        return res.status(502).json({
+          erro: "Apps Script não retornou JSON.",
+          detalhe:
+            "Verifique se o Web App está publicado com acesso público (Anyone).",
+        });
+      }
+
+      return res.status(response.status).type("application/json").send(text);
+    }
+
+    if (req.method === "POST") {
+      const bodyPayload = {
+        ...(req.body || {}),
+        apiKey: DRIVE_WEBAPP_API_KEY,
+      };
+      const { response, contentType, text } = await forward(webAppUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyPayload),
+      });
+
+      if (!contentType.includes("application/json")) {
+        return res.status(502).json({
+          erro: "Apps Script não retornou JSON.",
+          detalhe:
+            "Verifique se o Web App está publicado com acesso público (Anyone).",
+        });
+      }
+
+      return res.status(response.status).type("application/json").send(text);
+    }
+
+    return res.status(405).json({ erro: "Método não suportado." });
+  } catch (error) {
+    console.error("Erro ao chamar Apps Script:", error);
+    return res.status(500).json({
+      erro: "Falha ao acessar Apps Script.",
+      detalhe: error.message,
+    });
+  }
+});
+
+// 📎 Upload de imagens para Drive (equipamentos)
+app.get("/api/drive-equipamentos", async (req, res) => {
+  const { serial, email } = req.query;
+  const folderName = buildFolderName(serial, email);
+
+  if (!folderName) {
+    return res.status(400).json({ erro: "Serial é obrigatório." });
+  }
+
+  try {
+    const drive = getDriveClient();
+    const folderId = await findFolderId(drive, folderName);
+
+    if (!folderId) {
+      return res.json({ files: [] });
+    }
+
+    const response = await drive.files.list({
+      q: [
+        `'${folderId}' in parents`,
+        "trashed = false",
+        "mimeType contains 'image/'",
+      ].join(" and "),
+      fields: "files(id,name,webViewLink,mimeType,createdTime)",
+      corpora: "allDrives",
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      orderBy: "createdTime desc",
+    });
+
+    return res.json({ files: response.data.files || [] });
+  } catch (error) {
+    console.error("Erro ao listar imagens no Drive:", error);
+    return res.status(500).json({
+      erro: "Falha ao listar imagens no Drive.",
+      detalhe: error.message,
+    });
+  }
+});
+
+app.post(
+  "/api/drive-equipamentos",
+  upload.array("files", 10),
+  async (req, res) => {
+    const { serial, email } = req.body;
+    const folderName = buildFolderName(serial, email);
+
+    if (!folderName) {
+      return res.status(400).json({ erro: "Serial é obrigatório." });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const imageFiles = files.filter((file) =>
+      String(file?.mimetype || "").startsWith("image/")
+    );
+
+    if (imageFiles.length === 0) {
+      return res.status(400).json({ erro: "Nenhuma imagem válida enviada." });
+    }
+
+    try {
+      const drive = getDriveClient();
+      const folderId = await ensureFolderId(drive, folderName);
+
+      const uploaded = await Promise.all(
+        imageFiles.map((file) => {
+          const safeName = String(file.originalname || "imagem").replace(
+            /[\\/]/g,
+            "-"
+          );
+          const fileName = `${Date.now()}_${safeName}`;
+
+          return drive.files.create({
+            requestBody: {
+              name: fileName,
+              parents: [folderId],
+            },
+            media: {
+              mimeType: file.mimetype || "application/octet-stream",
+              body: Readable.from(file.buffer),
+            },
+            fields: "id,name,webViewLink",
+            supportsAllDrives: true,
+          });
+        })
+      );
+
+      return res.json({
+        files: uploaded.map((entry) => entry.data),
+        folderName,
+      });
+    } catch (error) {
+      console.error("Erro ao enviar imagem para o Drive:", error);
+      return res.status(500).json({
+        erro: "Falha ao enviar imagens para o Drive.",
+        detalhe: error.message,
+      });
+    }
+  }
+);
+
+app.delete("/api/drive-equipamentos", async (req, res) => {
+  const fileId = req.body?.fileId || req.query?.fileId;
+
+  if (!fileId) {
+    return res.status(400).json({ erro: "fileId é obrigatório." });
+  }
+
+  try {
+    const drive = getDriveClient();
+    await drive.files.delete({
+      fileId,
+      supportsAllDrives: true,
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Erro ao excluir imagem no Drive:", error);
+    return res.status(500).json({
+      erro: "Falha ao excluir imagem.",
+      detalhe: error.message,
+    });
   }
 });
 

@@ -11,6 +11,7 @@ import {
   KeyRound,
   Download,
   Building2,
+  Users,
 } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
@@ -65,6 +66,7 @@ export default function SideMenu({ collapsed = false }) {
   const extras = [
     { to: "/licenses", label: "Licenças", icon: KeyRound },
     { to: "/downloads", label: "Downloads", icon: Download },
+    { to: "/users", label: "Usuários", icon: Users },
     { to: "/settings", label: "Configurações", icon: Settings },
   ];
 

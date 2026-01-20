@@ -4,30 +4,36 @@ import { db } from "../firebase";
 import { Download, Monitor, Mail, NotebookPen, Loader2, AlertTriangle } from "lucide-react";
 import NotebookDetailModal from "./NotebookDetailModal";
 import showToast from "../utils/showToast";
+import { parseAvailability } from "../utils/availability";
 
 /** Badge de disponibilidade */
 function AvailabilityBadge({ status }) {
-  const ok =
-    (status || "")
-      .toString()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/\p{Diacritic}/gu, "") === "disponivel";
+  const availability = parseAvailability(status);
+  const ok = availability?.ok;
+  const label = availability?.label || status || "—";
+  const badgeClass =
+    ok === true
+      ? "bg-green-500/15 text-green-400"
+      : ok === false
+      ? "bg-rose-500/15 text-rose-300"
+      : "bg-slate-500/15 text-slate-300";
+  const dotClass =
+    ok === true ? "bg-green-400" : ok === false ? "bg-rose-300" : "bg-slate-300";
 
   return (
     <span
       className={[
         "inline-flex items-center gap-2 text-xs font-semibold px-2 py-0.5 rounded-full",
-        ok ? "bg-green-500/15 text-green-400" : "bg-rose-500/15 text-rose-300",
+        badgeClass,
       ].join(" ")}
     >
       <span
         className={[
           "w-2 h-2 rounded-full",
-          ok ? "bg-green-400" : "bg-rose-300",
+          dotClass,
         ].join(" ")}
       />
-      {ok ? "Disponível" : "Indisponível"}
+      {label}
     </span>
   );
 }

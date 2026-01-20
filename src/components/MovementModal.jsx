@@ -16,7 +16,9 @@ import {
 import { db } from "../firebase";
 import { Mail, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 import showToast from "../utils/showToast";
+import NotebookAnexoModal from "./NotebookAnexoModal";
 
 const tipos = ["Saida", "Entrada"];
 const statusTermo = ["Pendente", "Finalizado"];
@@ -69,7 +71,11 @@ export default function MovementModal({
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
+  const [modeloLocked, setModeloLocked] = useState(false);
   const [modelOptions, setModelOptions] = useState(DEFAULT_MODEL_OPTIONS);
+  const [anexoOpen, setAnexoOpen] = useState(false);
+  const [anexoSerial, setAnexoSerial] = useState("");
+  const [anexoEmail, setAnexoEmail] = useState("");
   const dataRef = useRef();
   const hasModelOptions = modelOptions.length > 0;
 
@@ -131,6 +137,7 @@ export default function MovementModal({
       setStatus(editMovement.status || "Pendente");
       setDisponibilidade(editMovement.disponibilidade || "Disponível");
       setEmail(editMovement.email || "");
+      setModeloLocked(false);
     } else {
       const today = new Date().toISOString().split("T")[0];
       setData(variant === "inventory" ? today : "");
@@ -143,8 +150,33 @@ export default function MovementModal({
       setStatus("Pendente");
       setDisponibilidade(variant === "inventory" ? "Disponível" : "Disponível");
       setEmail("");
+      setModeloLocked(false);
     }
   }, [editMovement, numeroSerie, usuario, office, variant]);
+
+  useEffect(() => {
+    if (editMovement) return;
+    const normalizedNumero = normalizeSerial(numero);
+    if (!normalizedNumero) {
+      if (modeloLocked) setModeloLocked(false);
+      return;
+    }
+    const existingRecord = history.find((item) => {
+      const recordSerial = normalizeSerial(item?.numeroSerie || "");
+      return recordSerial === normalizedNumero;
+    });
+    const existingModel = existingRecord?.modelo
+      ? String(existingRecord.modelo).trim()
+      : "";
+    if (existingModel) {
+      if (modelo !== existingModel) {
+        setModelo(existingModel);
+      }
+      if (!modeloLocked) setModeloLocked(true);
+    } else if (modeloLocked) {
+      setModeloLocked(false);
+    }
+  }, [history, numero, editMovement, modelo, modeloLocked]);
 
   useEffect(() => {
     if (open && dataRef.current) dataRef.current.focus();
@@ -237,6 +269,23 @@ export default function MovementModal({
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text);
     showToast({ message: "Copiado!", type: "success", duration: 2000 });
+  };
+
+  const handleOpenAnexos = () => {
+    const serial = normalizeSerial(numero);
+    if (!serial) {
+      showToast({
+        type: "error",
+        message: "Informe o número de série antes de anexar imagens.",
+        duration: 3000,
+      });
+      return;
+    }
+    if (serial !== numero) setNumero(serial);
+    setAnexoSerial(serial);
+    const loggedEmail = (usuario?.email || responsavel || "").trim();
+    setAnexoEmail(loggedEmail);
+    setAnexoOpen(true);
   };
 
   // mapeia office -> coleção de estoque
@@ -337,6 +386,7 @@ export default function MovementModal({
       // payload base
       const sanitizedObs = (obs || "").trim();
 
+      const createdAtValue = editMovement?.criadoEm || Timestamp.now();
       const payload = {
         data,
         tipo,
@@ -346,7 +396,7 @@ export default function MovementModal({
         local,
         obs: sanitizedObs,
         disponibilidade,
-        criadoEm: Timestamp.now(),
+        criadoEm: createdAtValue,
         ...(email ? { email } : {}),
         status:
           variant !== "inventory"
@@ -446,17 +496,17 @@ export default function MovementModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4"
       >
         <motion.div
           initial={{ scale: 0.95, y: 30 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 30 }}
           transition={{ type: "spring", stiffness: 300, damping: 24 }}
-          className="modal-card w-full max-w-3xl overflow-hidden"
+          className="modal-card w-full max-w-3xl max-h-[90vh] md:max-h-[85vh] overflow-hidden flex flex-col"
         >
           {/* Cabeçalho */}
-          <div className="modal-head px-6 py-4 flex items-center justify-between">
+          <div className="modal-head px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-[var(--text)]">
                 {editMovement ? "Editar Cadastro" : "Cadastro"}
@@ -483,9 +533,9 @@ export default function MovementModal({
           </div>
 
           {/* Conteúdo */}
-          <div className="p-6 space-y-6 bg-[var(--bg-soft)]">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6 bg-[var(--bg-soft)]">
             <form onSubmit={handleSave} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block mb-1 text-sm text-[var(--text-muted)]">
                     Data
@@ -530,6 +580,7 @@ export default function MovementModal({
                       value={modelo}
                       onChange={(e) => setModelo(e.target.value)}
                       required
+                      disabled={modeloLocked}
                     >
                       <option value="">Selecione um modelo</option>
                       {modelOptions.map((option) => (
@@ -544,7 +595,22 @@ export default function MovementModal({
                       value={modelo}
                       onChange={(e) => setModelo(e.target.value)}
                       required
+                      disabled={modeloLocked}
                     />
+                  )}
+                  {modeloLocked && (
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Modelo detectado automaticamente para este número de
+                      série.
+                    </p>
+                  )}
+                  {variant === "inventory" && (
+                    <Link
+                      to="/settings#notebook-mo adels"
+                      className="mt-2 inline-flex text-xs text-[var(--accent)] hover:underline"
+                    >
+                      Para criar um modelo, clique aqui.
+                    </Link>
                   )}
                 </div>
 
@@ -603,7 +669,7 @@ export default function MovementModal({
                   />
                 </div>
 
-                <div className="md:col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block mb-1 text-sm text-[var(--text-muted)]">
                     Observações
                   </label>
@@ -656,9 +722,18 @@ export default function MovementModal({
                 )}
               </div>
 
-              <button type="submit" disabled={saving} className="btn-neon">
-                {saving ? "Salvando..." : "Salvar"}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="submit" disabled={saving} className="btn-neon">
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenAnexos}
+                  className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
+                >
+                  Adicionar imagens
+                </button>
+              </div>
             </form>
 
             <div className="space-y-3">
@@ -777,6 +852,13 @@ export default function MovementModal({
           </div>
         </motion.div>
       </motion.div>
+      {anexoOpen && (
+        <NotebookAnexoModal
+          serial={anexoSerial}
+          email={anexoEmail}
+          onClose={() => setAnexoOpen(false)}
+        />
+      )}
     </AnimatePresence>
   );
 }

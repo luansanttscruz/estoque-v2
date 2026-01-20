@@ -5,7 +5,7 @@ import {
   setPersistence,
   browserLocalPersistence,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Lê as credenciais do .env (CRA usa REACT_APP_)
@@ -24,7 +24,9 @@ const app = initializeApp(firebaseConfig);
 
 // Serviços
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+});
 export const storage = getStorage(app);
 
 // Persistência de sessão (fica logado no navegador)

@@ -38,14 +38,14 @@ const cards = [
 
 export default function Menu() {
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="flex items-center justify-center gap-2 mb-8">
-        <h1 className="text-3xl font-semibold text-[var(--text)] drop-shadow">
+    <div className="mx-auto max-w-6xl px-4 py-5 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6 sm:mb-8 text-center sm:text-left">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-[var(--text)] drop-shadow">
           Menu Principal
         </h1>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map(({ to, title, subtitle, Icon }, index) => (
           <motion.div
             key={to}
@@ -60,7 +60,10 @@ export default function Menu() {
               className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition
                          shadow-[0_0_24px_0_rgba(225,29,116,0.25),0_0_60px_0_rgba(225,29,116,0.15)]"
             />
-            <Link to={to} className="relative flex items-center gap-4 p-6">
+            <Link
+              to={to}
+              className="relative flex items-center gap-4 p-5 sm:p-6"
+            >
               <div
                 className="bg-[var(--accent)]/15 text-[var(--accent)] p-3 rounded-full
                            border border-[var(--accent)]/30 group-hover:border-[var(--accent)]/60 transition"
@@ -82,7 +85,7 @@ export default function Menu() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-lg p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-lg p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
             <Settings className="w-5 h-5 text-[var(--accent)]" />

@@ -1,11 +1,17 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+} from "firebase/auth";
 import { auth } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { signInWithPopup } from "firebase/auth";
 
 
 const provider = new GoogleAuthProvider();
+const DRIVE_TOKEN_KEY = "googleDriveAccessToken";
+provider.addScope("https://www.googleapis.com/auth/drive");
+provider.setCustomParameters({ prompt: "consent" });
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,8 +26,8 @@ export default function Login() {
     setErro("");
 
     try {
-      await setPersistence(auth, browserLocalPersistence);
       await signInWithEmailAndPassword(auth, email, senha);
+      localStorage.removeItem(DRIVE_TOKEN_KEY);
       navigate("/");
     } catch (err) {
       console.error("Erro ao logar com e-mail:", err.message);
@@ -34,13 +40,20 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setErro(""); // limpa erros anteriores
     try {
-      await setPersistence(auth, browserLocalPersistence); // Manter Login
       const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken;
+      if (accessToken) {
+        localStorage.setItem(DRIVE_TOKEN_KEY, accessToken);
+      } else {
+        localStorage.removeItem(DRIVE_TOKEN_KEY);
+      }
       const email = result.user.email;
   
       // Verifica se é um e-mail da VTEX
       if (!email.endsWith("@vtex.com")) {
         setErro("Apenas e-mails @vtex.com são permitidos.");
+        localStorage.removeItem(DRIVE_TOKEN_KEY);
         await auth.signOut(); // força logout
         return;
       }

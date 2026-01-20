@@ -1,15 +1,164 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Permite leitura/escrita apenas para usuários autenticados
-    match /{collection}/{document} {
-      allow read, write: if request.auth != null;
+    // Helpers
+    function isAuthenticated() {
+      return request.auth != null;
     }
-    
-    // Opcional: Permite leitura pública de alguns dados (se necessário)
-    match /dados_publicos/{document} {
-      allow read: if true;
-      allow write: if request.auth != null;
+
+    function domainAllowed() {
+      return isAuthenticated()
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('(?i)[^@]+@vtex\\.com$');
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return domainAllowed() && userDoc().data.role == "admin";
+    }
+
+    function canEdit() {
+      return domainAllowed() && (isAdmin() || userDoc().data.access == "edit");
+    }
+
+    function isAdminEmail() {
+      return domainAllowed() && request.auth.token.email == "luan.cruz@vtex.com";
+    }
+
+    // Usuários (admin/padrão)
+    match /users/{userId} {
+      allow read: if domainAllowed();
+      allow create: if domainAllowed()
+        && request.auth.uid == userId
+        && (request.resource.data.role in ["admin", "padrao"])
+        && (request.resource.data.access in ["edit", "view"])
+        && (request.resource.data.role != "admin" || isAdminEmail());
+      allow update: if domainAllowed()
+        && (
+          isAdmin() ||
+          (request.auth.uid == userId
+            && request.resource.data.role == resource.data.role
+            && (
+              request.resource.data.access == resource.data.access ||
+              (!("access" in resource.data) && request.resource.data.access == "edit")
+            ))
+        );
+      allow delete: if isAdmin();
+    }
+
+    // Preferências do usuário
+    match /userPreferences/{uid} {
+      allow read: if domainAllowed();
+      allow create, update: if canEdit() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // Licenças por máquina
+    match /licenses-machines/{serial} {
+      allow read: if domainAllowed();
+      allow create: if canEdit()
+        && request.resource.id == request.resource.data.serial
+        && request.resource.data.serial is string
+        && request.resource.data.machine is string
+        && request.resource.data.recoveryKey is string
+        && request.resource.data.createdAt is timestamp;
+      allow update: if canEdit()
+        && request.resource.id == resource.data.serial
+        && request.resource.data.serial == resource.data.serial
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.machine is string
+        && request.resource.data.recoveryKey is string;
+      allow delete: if canEdit();
+    }
+
+    // Movimentações de equipamento
+    match /equipment-movements/{docId} {
+      allow read: if domainAllowed();
+      allow create: if canEdit() && movementIsValid();
+      allow update: if canEdit() && movementIsValid()
+        && resource.data.criadoEm == request.resource.data.criadoEm;
+      allow delete: if canEdit();
+
+      function movementIsValid() {
+        return
+          (request.resource.data.tipo in ['Saida','Entrada']) &&
+          (request.resource.data.status in ['Pendente','Finalizado']) &&
+          (request.resource.data.disponibilidade in ['Disponível','Indisponível']) &&
+          (request.resource.data.data is string) &&
+          (request.resource.data.modelo is string) &&
+          (request.resource.data.numeroSerie is string) &&
+          (request.resource.data.responsavel is string) &&
+          (request.resource.data.local is string) &&
+          (request.resource.data.criadoEm is timestamp) &&
+          (!('obs' in request.resource.data) || request.resource.data.obs is string) &&
+          (!('email' in request.resource.data) || request.resource.data.email is string) &&
+          (!('fotoUrl' in request.resource.data) || request.resource.data.fotoUrl is string) &&
+          (!('fotoDriveLink' in request.resource.data) || request.resource.data.fotoDriveLink is string);
+      }
+    }
+
+    // WEEKLY TASKS por usuário: weeklytasks-<uid>
+    match /weeklytasks-users/{uid}/tasks/{taskId} {
+      allow read: if domainAllowed() && request.auth.uid == uid;
+      allow write: if canEdit() && request.auth.uid == uid;
+    }
+
+    // Estoque por escritório
+    match /{officeId}/{serialId} {
+      allow read: if domainAllowed()
+        && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
+      allow create: if canEdit()
+        && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
+        && stockValid()
+        && request.resource.id == request.resource.data.serial;
+      allow update: if canEdit()
+        && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
+        && stockValid()
+        && request.resource.id == resource.data.serial
+        && request.resource.data.serial == resource.data.serial
+        && resource.data.createdAt == request.resource.data.createdAt;
+      allow delete: if canEdit()
+        && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
+
+      function stockValid() {
+        return
+          (request.resource.data.serial is string) &&
+          (request.resource.data.modelo is string) &&
+          (request.resource.data.status in ['Disponivel','Indisponivel','Disponível','Indisponível']) &&
+          (request.resource.data.createdAt is timestamp) &&
+          (request.resource.data.updatedAt is timestamp) &&
+          (!('email' in request.resource.data) || request.resource.data.email is string) &&
+          (!('observacao' in request.resource.data) || request.resource.data.observacao is string) &&
+          (!('fotoUrl' in request.resource.data) || request.resource.data.fotoUrl is string) &&
+          (!('fotoDriveLink' in request.resource.data) || request.resource.data.fotoDriveLink is string);
+      }
+    }
+
+    // Configurações globais
+    match /appSettings/{docId} {
+      allow read: if domainAllowed();
+      allow update: if isAdmin() && docId == 'global';
+      allow create, delete: if false;
+    }
+
+    // Funcionários (somente leitura)
+    match /employees/{uid} {
+      allow read: if domainAllowed();
+      allow write: if false;
+    }
+
+    // Periféricos
+    match /peripherals/{docId} {
+      allow read: if domainAllowed();
+      allow create, update, delete: if canEdit();
+    }
+
+    // Bloqueio padrão — deixe sempre por último
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
