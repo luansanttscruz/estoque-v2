@@ -92,7 +92,8 @@ export default function InventoryPage({
   const [editNotebook, setEditNotebook] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const { usuario } = useAuth();
+  const { usuario, canEditModule } = useAuth();
+  const canEditInventory = canEditModule("inventory");
   const sidebar = useSidebar();
   const collapsed = sidebar?.collapsed ?? false;
   const tableWidthClass = collapsed
@@ -336,10 +337,21 @@ export default function InventoryPage({
             Exportar
           </button>
           <button
-            onClick={() => setMovementModalOpen(true)}
+            onClick={() => {
+              if (!canEditInventory) {
+                showToast({
+                  type: "info",
+                  message: "Seu perfil possui acesso somente de visualização.",
+                });
+                return;
+              }
+              setMovementModalOpen(true);
+            }}
+            disabled={!canEditInventory}
             className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-lg
                        bg-[var(--accent)]/10 text-[var(--accent)]
-                       border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition"
+                       border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
             Cadastro
@@ -420,9 +432,21 @@ export default function InventoryPage({
                       onMouseDown={(e) => e.stopPropagation()}
                     >
                       <button
-                        onClick={() => setEditNotebook(it)}
+                        onClick={() => {
+                          if (!canEditInventory) {
+                            showToast({
+                              type: "info",
+                              message:
+                                "Seu perfil possui acesso somente de visualização.",
+                            });
+                            return;
+                          }
+                          setEditNotebook(it);
+                        }}
+                        disabled={!canEditInventory}
                         className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--line)]
-                                 text-[var(--text)] hover:bg-white/5 transition"
+                                 text-[var(--text)] hover:bg-white/5 transition
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Pencil className="w-4 h-4 text-[var(--accent)]" />
                         Editar
@@ -446,6 +470,14 @@ export default function InventoryPage({
           notebook={selected}
           office={office}
           onEdit={(nb) => {
+            if (!canEditInventory) {
+              showToast({
+                type: "info",
+                message:
+                  "Seu perfil possui acesso somente de visualização.",
+              });
+              return;
+            }
             setEditNotebook(nb);
             setModalOpen(false);
           }}
@@ -517,6 +549,14 @@ export default function InventoryPage({
               <button
                 onClick={async () => {
                   if (!confirmDelete?.id || deletingId) return;
+                  if (!canEditInventory) {
+                    showToast({
+                      type: "info",
+                      message:
+                        "Seu perfil possui acesso somente de visualização.",
+                    });
+                    return;
+                  }
                   setDeletingId(confirmDelete.id);
                   try {
                     await deleteDoc(doc(db, collectionName, confirmDelete.id));
@@ -542,7 +582,7 @@ export default function InventoryPage({
                 }}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-rose-500/40 text-white bg-rose-600
                            hover:bg-rose-500/80 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={Boolean(deletingId)}
+                disabled={Boolean(deletingId) || !canEditInventory}
               >
                 {deletingId ? (
                   <>

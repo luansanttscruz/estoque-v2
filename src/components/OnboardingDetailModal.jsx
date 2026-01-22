@@ -15,6 +15,7 @@ export default function OnboardingDetailModal({
   onClose,
   onAtualizar,
   modoEdicaoInicial = false,
+  canEdit = true,
 }) {
   const [editando, setEditando] = useState(modoEdicaoInicial);
   const [form, setForm] = useState({ ...onboarding });
@@ -27,14 +28,15 @@ export default function OnboardingDetailModal({
 
   useEffect(() => {
     setForm({ ...onboarding });
-    setEditando(modoEdicaoInicial);
-  }, [onboarding, modoEdicaoInicial]);
+    setEditando(canEdit ? modoEdicaoInicial : false);
+  }, [onboarding, modoEdicaoInicial, canEdit]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const salvar = async () => {
+    if (!canEdit) return;
     if (!form.nome?.trim() || !form.data?.trim()) {
       alert("Os campos 'Nome' e 'Data' são obrigatórios.");
       return;
@@ -59,6 +61,7 @@ export default function OnboardingDetailModal({
   };
 
   const excluir = async () => {
+    if (!canEdit) return;
     const confirm = window.confirm(
       "Tem certeza que deseja excluir este onboarding?"
     );
@@ -178,9 +181,13 @@ export default function OnboardingDetailModal({
           <div className="flex gap-3">
             {!editando ? (
               <button
-                onClick={() => setEditando(true)}
+                onClick={() => {
+                  if (!canEdit) return;
+                  setEditando(true);
+                }}
                 title="Editar"
-                className="text-gray-500 hover:text-pink-600"
+                className="text-gray-500 hover:text-pink-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canEdit}
               >
                 <Pencil className="w-5 h-5" />
               </button>
@@ -188,7 +195,8 @@ export default function OnboardingDetailModal({
               <button
                 onClick={salvar}
                 title="Salvar alterações"
-                className="px-4 py-2 text-sm text-pink-600 border border-pink-600 rounded-lg hover:text-pink-700 hover:border-pink-700 transition"
+                className="px-4 py-2 text-sm text-pink-600 border border-pink-600 rounded-lg hover:text-pink-700 hover:border-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canEdit}
               >
                 Salvar
               </button>
@@ -205,7 +213,8 @@ export default function OnboardingDetailModal({
             <button
               onClick={excluir}
               title="Excluir"
-              className="px-4 py-2 text-sm text-pink-600 border border-pink-600 rounded-lg hover:text-pink-700 hover:border-pink-700 transition"
+              className="px-4 py-2 text-sm text-pink-600 border border-pink-600 rounded-lg hover:text-pink-700 hover:border-pink-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!canEdit}
             >
               <Trash2 className="w-5 h-5" />
             </button>

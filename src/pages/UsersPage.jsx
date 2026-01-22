@@ -8,10 +8,16 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { Search, ShieldCheck, User, Users } from "lucide-react";
+import { Search, ShieldCheck, User, Users, X } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import showToast from "../utils/showToast";
+import {
+  PERMISSION_AREAS,
+  PERMISSION_OPTIONS,
+  buildPermissions,
+  mergePermissions,
+} from "../utils/permissions";
 
 const ROLE_META = {
   admin: {
@@ -98,6 +104,10 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [savingId, setSavingId] = useState(null);
+  const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [permissionsDraft, setPermissionsDraft] = useState({});
+  const [savingPermissions, setSavingPermissions] = useState(false);
 
   useEffect(() => {
     const usersRef = query(collection(db, "users"), orderBy("email", "asc"));
@@ -203,8 +213,67 @@ export default function UsersPage() {
     }
   };
 
+  const openPermissionsModal = (target) => {
+    if (!isAdmin) return;
+    const role = target.role || "padrao";
+    const access = role === "admin" ? "edit" : target.access || "edit";
+    const fallbackPermissions = buildPermissions(access);
+    const mergedPermissions = mergePermissions(
+      target.permissions,
+      fallbackPermissions
+    );
+    setSelectedUser(target);
+    setPermissionsDraft(mergedPermissions);
+    setPermissionsOpen(true);
+  };
+
+  const closePermissionsModal = () => {
+    setPermissionsOpen(false);
+    setSelectedUser(null);
+    setPermissionsDraft({});
+  };
+
+  const handlePermissionChange = (key, value) => {
+    setPermissionsDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedUser || !isAdmin) return;
+    if (selectedUser.role === "admin") {
+      showToast({
+        type: "info",
+        message: "Admins sempre possuem acesso total.",
+      });
+      return;
+    }
+
+    setSavingPermissions(true);
+    try {
+      await updateDoc(doc(db, "users", selectedUser.id), {
+        permissions: permissionsDraft,
+        updatedAt: serverTimestamp(),
+        updatedBy: usuario?.email || "",
+      });
+      showToast({
+        type: "success",
+        message: "Permissões atualizadas com sucesso.",
+      });
+      closePermissionsModal();
+    } catch (error) {
+      console.error("Erro ao atualizar permissões:", error);
+      showToast({
+        type: "error",
+        message: "Não foi possível atualizar as permissões.",
+      });
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
   const currentRole = perfil?.role || "padrao";
   const currentAccess = perfil?.access || "edit";
+  const selectedRole = selectedUser?.role || "padrao";
+  const selectedAccess = selectedUser?.access || "edit";
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 space-y-6">
@@ -282,10 +351,20 @@ export default function UsersPage() {
             const role = user.role || "padrao";
             const access = user.access || "edit";
             const isSelf = usuario?.uid === user.id;
+            const rowClickable = isAdmin;
             return (
               <div
                 key={user.id}
-                className="grid grid-cols-12 gap-4 items-center border-t border-[var(--line)] py-3"
+                onClick={() => {
+                  if (!rowClickable) return;
+                  openPermissionsModal(user);
+                }}
+                className={[
+                  "grid grid-cols-12 gap-4 items-center border-t border-[var(--line)] py-3",
+                  rowClickable
+                    ? "cursor-pointer hover:bg-[var(--rowHover)] transition"
+                    : "",
+                ].join(" ")}
               >
                 <div className="col-span-4">
                   <div className="flex items-center gap-2">
@@ -310,6 +389,8 @@ export default function UsersPage() {
                         handleRoleChange(user, event.target.value)
                       }
                       disabled={savingId === user.id}
+                      onClick={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
                       className="input-neon w-full text-sm"
                     >
                       {ROLE_OPTIONS.map((option) => (
@@ -330,6 +411,8 @@ export default function UsersPage() {
                         handleAccessChange(user, event.target.value)
                       }
                       disabled={savingId === user.id || role === "admin"}
+                      onClick={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
                       className="input-neon w-full text-sm"
                     >
                       {ACCESS_OPTIONS.map((option) => (
@@ -352,6 +435,99 @@ export default function UsersPage() {
           })
         )}
       </section>
+
+      {permissionsOpen && selectedUser && (
+        <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-2xl">
+            <div className="px-5 py-4 border-b border-[var(--line)] flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text)]">
+                  Permissões do usuário
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Defina quais módulos o usuário pode editar ou apenas
+                  visualizar.
+                </p>
+              </div>
+              <button
+                onClick={closePermissionsModal}
+                className="rounded-full border border-[var(--line)] bg-[var(--bg-soft)] p-1.5 text-[var(--text)] hover:bg-white/5 transition"
+                aria-label="Fechar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-soft)] px-4 py-3">
+                <div className="text-sm font-semibold text-[var(--text)]">
+                  {selectedUser.nome || selectedUser.email || "Sem nome"}
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">
+                  {selectedUser.email || "—"}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <RoleBadge role={selectedRole} />
+                  <AccessBadge access={selectedAccess} />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {PERMISSION_AREAS.map((area) => (
+                  <div
+                    key={area.key}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--bg-card)] px-4 py-3"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text)]">
+                        {area.label}
+                      </div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        Controle de acesso ao módulo.
+                      </div>
+                    </div>
+                    <select
+                      value={permissionsDraft?.[area.key] || "edit"}
+                      onChange={(event) =>
+                        handlePermissionChange(area.key, event.target.value)
+                      }
+                      disabled={selectedRole === "admin"}
+                      className="input-neon text-sm"
+                    >
+                      {PERMISSION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-[var(--line)] flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs text-[var(--text-muted)]">
+                Administradores possuem acesso total automaticamente.
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={closePermissionsModal}
+                  className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSavePermissions}
+                  disabled={savingPermissions || selectedRole === "admin"}
+                  className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white hover:brightness-110 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingPermissions ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

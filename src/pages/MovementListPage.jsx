@@ -7,6 +7,7 @@ import MovementHistoryModal from "../components/MovementHistoryModal";
 import { Download, History, Plus } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useSidebar } from "../context/SidebarContext";
+import showToast from "../utils/showToast";
 
 const OFFICE_OPTIONS = ["São Paulo", "Rio de Janeiro", "João Pessoa", "Outros"];
 const PATH_TO_OFFICE = {
@@ -73,7 +74,8 @@ const escapeCsv = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
 export default function MovementListPage({ office: officeProp }) {
   const office = useResolvedOffice(officeProp);
-  const { usuario } = useAuth();
+  const { usuario, canEditModule } = useAuth();
+  const canEditMovement = canEditModule("movement");
   const sidebar = useSidebar();
   const collapsed = sidebar?.collapsed ?? false;
   const containerWidthClass = collapsed
@@ -212,11 +214,25 @@ export default function MovementListPage({ office: officeProp }) {
   };
 
   const handleNew = () => {
+    if (!canEditMovement) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setEditMovement(null);
     setModalOpen(true);
   };
 
   const handleEdit = (movement) => {
+    if (!canEditMovement) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setEditMovement(movement);
     setModalOpen(true);
   };
@@ -296,9 +312,11 @@ export default function MovementListPage({ office: officeProp }) {
             </button>
             <button
               onClick={handleNew}
+              disabled={!canEditMovement}
               className="inline-flex items-center justify-center gap-1 text-sm px-3 py-2 rounded-lg
                          bg-[var(--accent)]/10 text-[var(--accent)]
-                         border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition"
+                         border border-[var(--accent)]/50 hover:bg-[var(--accent)]/20 transition
+                         disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
               Nova movimentação
@@ -322,7 +340,9 @@ export default function MovementListPage({ office: officeProp }) {
             <button
               key={mov.id || mov.numeroSerie}
               onClick={() => handleEdit(mov)}
-              className="w-full text-left rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4 shadow-sm hover:border-[var(--accent)]/60 transition"
+              disabled={!canEditMovement}
+              className="w-full text-left rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4 shadow-sm hover:border-[var(--accent)]/60 transition
+                         disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
@@ -437,8 +457,10 @@ export default function MovementListPage({ office: officeProp }) {
                 <tr
                   key={mov.id || mov.numeroSerie}
                   onClick={() => handleEdit(mov)}
-                  className="border-t border-[var(--line)] hover:bg-[var(--rowHover)]
-                             transition cursor-pointer"
+                  className={[
+                    "border-t border-[var(--line)] hover:bg-[var(--rowHover)] transition",
+                    canEditMovement ? "cursor-pointer" : "cursor-not-allowed",
+                  ].join(" ")}
                 >
                   <td className="p-3">{formatDate(mov.data)}</td>
                   <td className="p-3">
@@ -488,8 +510,10 @@ export default function MovementListPage({ office: officeProp }) {
                     <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => handleEdit(mov)}
+                        disabled={!canEditMovement}
                         className="px-3 py-1.5 text-xs rounded border border-[var(--line)]
-                                   text-[var(--text)] hover:bg-white/5 transition"
+                                   text-[var(--text)] hover:bg-white/5 transition
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Editar
                       </button>

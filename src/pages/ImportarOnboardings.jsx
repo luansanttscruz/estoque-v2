@@ -3,8 +3,12 @@ import { useState } from "react";
 import * as XLSX from "xlsx";
 import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
+import showToast from "../utils/showToast";
 
 export default function ImportarOnboardings() {
+  const { canEditModule } = useAuth();
+  const canEditOnboarding = canEditModule("onboarding");
   const [fileName, setFileName] = useState("");
   const [mensagem, setMensagem] = useState(null);
 
@@ -23,6 +27,13 @@ export default function ImportarOnboardings() {
   };
 
   const handleFile = async (e) => {
+    if (!canEditOnboarding) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     setFileName(file.name);
@@ -89,7 +100,12 @@ export default function ImportarOnboardings() {
   return (
     <div className="bg-white rounded-xl shadow p-6 max-w-xl mx-auto mt-10">
       <h2 className="text-2xl font-bold text-pink-700 mb-4">📥 Importar Onboardings</h2>
-      <input type="file" accept=".xlsx" onChange={handleFile} />
+      <input
+        type="file"
+        accept=".xlsx"
+        onChange={handleFile}
+        disabled={!canEditOnboarding}
+      />
       {fileName && <p className="mt-2">{fileName}</p>}
       {mensagem && (
         <p

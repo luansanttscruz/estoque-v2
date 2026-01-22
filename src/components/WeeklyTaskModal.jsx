@@ -2,7 +2,13 @@ import React, { useState } from "react";
 import { addDoc, updateDoc, doc, collection } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
+export default function WeeklyTaskModal({
+  open,
+  onClose,
+  editTask,
+  usuario,
+  canEdit = true,
+}) {
   const [atividade, setAtividade] = useState(editTask?.atividade || "");
   const [responsavel, setResponsavel] = useState(
     editTask?.responsavel || usuario?.email || ""
@@ -13,6 +19,7 @@ export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canEdit) return;
     setSaving(true);
     const payload = {
       atividade,
@@ -58,6 +65,7 @@ export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
               value={atividade}
               onChange={(e) => setAtividade(e.target.value)}
               required
+              disabled={!canEdit}
               style={{ resize: "vertical" }}
               placeholder="Descreva a atividade..."
             />
@@ -70,7 +78,7 @@ export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
                 value={responsavel}
                 onChange={(e) => setResponsavel(e.target.value)}
                 required
-                disabled={!!editTask}
+                disabled={!!editTask || !canEdit}
               />
             </div>
             <div className="flex-1">
@@ -80,6 +88,7 @@ export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
                 value={prioridade}
                 onChange={(e) => setPrioridade(e.target.value)}
                 required
+                disabled={!canEdit}
               >
                 <option value="Baixa">Baixa</option>
                 <option value="Média">Média</option>
@@ -95,18 +104,21 @@ export default function WeeklyTaskModal({ open, onClose, editTask, usuario }) {
               value={data}
               onChange={(e) => setData(e.target.value)}
               required
+              disabled={!canEdit}
             />
           </div>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !canEdit}
             className={`w-full py-3 rounded-lg text-white font-bold mt-2 transition ${
-              saving
+              saving || !canEdit
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-pink-600 hover:bg-pink-700"
             }`}
           >
-            {saving
+            {!canEdit
+              ? "Apenas visualizacao"
+              : saving
               ? "Salvando..."
               : editTask
               ? "Salvar Alterações"

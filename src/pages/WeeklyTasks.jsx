@@ -18,7 +18,8 @@ export default function WeeklyTasks() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { usuario } = useAuth();
+  const { usuario, canEditModule } = useAuth();
+  const canEditTasks = canEditModule("weeklyTasks");
   const [view, setView] = useState("ativas"); // 'ativas' | 'finalizadas'
 
   useEffect(() => {
@@ -36,16 +37,37 @@ export default function WeeklyTasks() {
   }, []);
 
   const handleAdd = () => {
+    if (!canEditTasks) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setEditTask(null);
     setModalOpen(true);
   };
 
   const handleEdit = (task) => {
+    if (!canEditTasks) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setEditTask(task);
     setModalOpen(true);
   };
 
   const handleDelete = async (id) => {
+    if (!canEditTasks) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     if (!window.confirm("Tem certeza que deseja excluir esta atividade?"))
       return;
     await deleteDoc(doc(db, "weekly-tasks", id));
@@ -56,6 +78,13 @@ export default function WeeklyTasks() {
   };
 
   const handleConclude = async (task) => {
+    if (!canEditTasks) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     await updateDoc(doc(db, "weekly-tasks", task.id), { status: "concluida" });
     showToast({
       type: "success",
@@ -99,8 +128,10 @@ export default function WeeklyTasks() {
           </div>
           <button
             onClick={handleAdd}
+            disabled={!canEditTasks}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--accent)]/60
-                       bg-[var(--accent)]/10 text-[var(--accent)] font-semibold hover:bg-[var(--accent)]/20 transition"
+                       bg-[var(--accent)]/10 text-[var(--accent)] font-semibold hover:bg-[var(--accent)]/20 transition
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-5 h-5" />
             Nova Atividade
@@ -167,20 +198,25 @@ export default function WeeklyTasks() {
                   <>
                     <button
                       onClick={() => handleEdit(task)}
+                      disabled={!canEditTasks}
                       className="p-2 rounded-lg border border-[var(--line)] text-[var(--text)]
-                                 hover:bg-white/5 transition"
+                                 hover:bg-white/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Edit className="w-4 h-4 text-[var(--accent)]" />
                     </button>
                     <button
                       onClick={() => handleDelete(task.id)}
-                      className="p-2 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 transition"
+                      disabled={!canEditTasks}
+                      className="p-2 rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 transition
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleConclude(task)}
-                      className="p-2 rounded-lg border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15 transition"
+                      disabled={!canEditTasks}
+                      className="p-2 rounded-lg border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15 transition
+                                 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <CheckCircle className="w-4 h-4" />
                     </button>
@@ -198,6 +234,7 @@ export default function WeeklyTasks() {
           onClose={() => setModalOpen(false)}
           editTask={editTask}
           usuario={usuario}
+          canEdit={canEditTasks}
         />
       )}
     </div>

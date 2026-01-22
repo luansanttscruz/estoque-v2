@@ -6,8 +6,12 @@ import SidebarOnboarding from "../components/SidebarOnboarding";
 import { Paperclip, CalendarClock, Users2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import OnboardingDetailModal from "../components/OnboardingDetailModal";
+import { useAuth } from "../context/AuthContext";
+import showToast from "../utils/showToast";
 
 export default function OnboardingPage() {
+  const { canEditModule } = useAuth();
+  const canEditOnboarding = canEditModule("onboarding");
   const [estrutura, setEstrutura] = useState({});
   const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [todosOnboardings, setTodosOnboardings] = useState([]);
@@ -96,6 +100,13 @@ export default function OnboardingPage() {
   const hasContext = Boolean(diaSelecionado || busca.trim());
 
   const handleCreate = () => {
+    if (!canEditOnboarding) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     const hoje = new Date();
     const dia = String(hoje.getDate()).padStart(2, "0");
     const mes = String(hoje.getMonth() + 1).padStart(2, "0");
@@ -137,14 +148,32 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <Link
-          to="/importar-onboardings"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent)]/50 bg-[var(--accent)]/10
-                     text-[var(--accent)] px-4 py-2 text-sm font-medium hover:bg-[var(--accent)]/20 transition"
-        >
-          <Paperclip className="w-4 h-4" />
-          Importar planilha
-        </Link>
+        {canEditOnboarding ? (
+          <Link
+            to="/importar-onboardings"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--accent)]/50 bg-[var(--accent)]/10
+                       text-[var(--accent)] px-4 py-2 text-sm font-medium hover:bg-[var(--accent)]/20 transition"
+          >
+            <Paperclip className="w-4 h-4" />
+            Importar planilha
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() =>
+              showToast({
+                type: "info",
+                message: "Seu perfil possui acesso somente de visualização.",
+              })
+            }
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--bg-card)]
+                       text-[var(--text-muted)] px-4 py-2 text-sm font-medium cursor-not-allowed opacity-70"
+            disabled
+          >
+            <Paperclip className="w-4 h-4" />
+            Importar planilha
+          </button>
+        )}
       </aside>
 
       <section className="flex-1 space-y-4">
@@ -181,8 +210,10 @@ export default function OnboardingPage() {
               />
               <button
                 onClick={handleCreate}
+                disabled={!canEditOnboarding}
                 className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent)]/60 px-3 py-2 text-sm font-medium
-                           bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition"
+                           bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)]/20 transition
+                           disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 + Criar
               </button>
@@ -280,6 +311,7 @@ export default function OnboardingPage() {
           onAtualizar={handleAtualizarOnboarding}
           criandoNovo={criandoNovo}
           modoEdicaoInicial={modoEdicao}
+          canEdit={canEditOnboarding}
         />
       )}
     </div>

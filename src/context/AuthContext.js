@@ -10,6 +10,11 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import {
+  DEFAULT_PERMISSIONS,
+  buildPermissions,
+  mergePermissions,
+} from "../utils/permissions";
 
 const AuthContext = createContext();
 
@@ -64,6 +69,7 @@ export function AuthProvider({ children }) {
             ...payload,
             role: shouldBeAdmin ? "admin" : "padrao",
             access: "edit",
+            permissions: DEFAULT_PERMISSIONS,
             createdAt: serverTimestamp(),
           });
         } else {
@@ -72,12 +78,18 @@ export function AuthProvider({ children }) {
             ? "admin"
             : data.role || "padrao";
           const nextAccess = shouldBeAdmin ? "edit" : data.access || "edit";
+          const fallbackPermissions = buildPermissions(nextAccess);
+          const mergedPermissions = mergePermissions(
+            data.permissions,
+            fallbackPermissions
+          );
           await setDoc(
             userRef,
             {
               ...payload,
               role: nextRole,
               access: nextAccess,
+              permissions: shouldBeAdmin ? DEFAULT_PERMISSIONS : mergedPermissions,
             },
             { merge: true }
           );
@@ -115,7 +127,23 @@ export function AuthProvider({ children }) {
         carregandoPerfil,
         isAdmin: perfil?.role === "admin",
         access: perfil?.access || "edit",
-        canEdit: perfil?.role === "admin" || perfil?.access === "edit",
+        permissions: mergePermissions(
+          perfil?.permissions,
+          buildPermissions(perfil?.access || "edit")
+        ),
+        canEdit:
+          perfil?.role === "admin" || (perfil?.access || "edit") === "edit",
+        canEditModule: (moduleKey) => {
+          if (perfil?.role === "admin") return true;
+          const fallbackPermissions = buildPermissions(
+            perfil?.access || "edit"
+          );
+          const mergedPermissions = mergePermissions(
+            perfil?.permissions,
+            fallbackPermissions
+          );
+          return (mergedPermissions?.[moduleKey] || "edit") === "edit";
+        },
       }}
     >
       {!carregando && children}

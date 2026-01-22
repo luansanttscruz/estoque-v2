@@ -29,6 +29,7 @@ import {
   Download,
 } from "lucide-react";
 import showToast from "../utils/showToast";
+import { useAuth } from "../context/AuthContext";
 
 const OFFICES = [
   { id: "sao-paulo", name: "São Paulo" },
@@ -138,6 +139,8 @@ const createEmptyStats = (categories) =>
   }, {});
 
 export default function PeripheralsPage() {
+  const { canEditModule } = useAuth();
+  const canEditPeripherals = canEditModule("peripherals");
   const [categories, setCategories] = useState(() => DEFAULT_CATEGORIES);
   const [stats, setStats] = useState(() => createEmptyStats(DEFAULT_CATEGORIES));
   const [entries, setEntries] = useState([]);
@@ -256,6 +259,13 @@ export default function PeripheralsPage() {
   }, [categories]);
 
   const handleOpenModal = (office) => {
+    if (!canEditPeripherals) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setSelectedOffice(office);
     setForm({
       category: categories[0]?.id || "",
@@ -268,6 +278,13 @@ export default function PeripheralsPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!canEditPeripherals) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     if (!form.category) {
       showToast({
         type: "error",
@@ -346,6 +363,13 @@ export default function PeripheralsPage() {
   };
 
   const handleEditEntry = (entry) => {
+    if (!canEditPeripherals) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     setEditForm({
       model: entry.model || "",
       email: entry.email || "",
@@ -359,6 +383,13 @@ export default function PeripheralsPage() {
 
   const handleUpdateEntry = async (event) => {
     event.preventDefault();
+    if (!canEditPeripherals) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     if (!editModal.entry?.id) return;
 
     const model = editForm.model.trim();
@@ -397,6 +428,13 @@ export default function PeripheralsPage() {
 
   const handleDeleteEntry = async (entry) => {
     if (!entry?.id) return;
+    if (!canEditPeripherals) {
+      showToast({
+        type: "info",
+        message: "Seu perfil possui acesso somente de visualização.",
+      });
+      return;
+    }
     const confirmed =
       typeof window !== "undefined"
         ? window.confirm(
@@ -504,7 +542,9 @@ export default function PeripheralsPage() {
               </div>
               <button
                 onClick={() => handleOpenModal(office)}
-                className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-3 py-1.5 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20"
+                disabled={!canEditPeripherals}
+                className="inline-flex items-center gap-2 rounded-xl border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-3 py-1.5 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20
+                           disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlusCircle className="w-4 h-4" />
                 Cadastrar
@@ -669,7 +709,9 @@ export default function PeripheralsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-4 py-2 font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20"
+                  disabled={!canEditPeripherals}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-4 py-2 font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20
+                             disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <PlusCircle className="w-4 h-4" />
                   Salvar
@@ -733,7 +775,9 @@ export default function PeripheralsPage() {
                             <button
                               type="button"
                               onClick={() => handleEditEntry(entry)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition hover:bg-white/5"
+                              disabled={!canEditPeripherals}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition hover:bg-white/5
+                                         disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <PenSquare className="w-4 h-4" />
                               Editar
@@ -741,7 +785,9 @@ export default function PeripheralsPage() {
                             <button
                               type="button"
                               onClick={() => handleDeleteEntry(entry)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10"
+                              disabled={!canEditPeripherals}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:bg-rose-500/10
+                                         disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Trash2 className="w-4 h-4" />
                               Remover
@@ -800,6 +846,7 @@ export default function PeripheralsPage() {
                   }
                   className="input-neon"
                   required
+                  disabled={!canEditPeripherals}
                 />
               </label>
 
@@ -815,6 +862,7 @@ export default function PeripheralsPage() {
                     }))
                   }
                   className="input-neon"
+                  disabled={!canEditPeripherals}
                 />
               </label>
 
@@ -832,6 +880,7 @@ export default function PeripheralsPage() {
                   }
                   className="input-neon"
                   required
+                  disabled={!canEditPeripherals}
                 />
               </label>
 
@@ -845,7 +894,9 @@ export default function PeripheralsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-4 py-2 font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20"
+                  disabled={!canEditPeripherals}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)]/60 bg-[var(--accent)]/10 px-4 py-2 font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20
+                             disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Salvar alterações
                 </button>

@@ -20,8 +20,53 @@ service cloud.firestore {
       return domainAllowed() && userDoc().data.role == "admin";
     }
 
-    function canEdit() {
-      return domainAllowed() && (isAdmin() || userDoc().data.access == "edit");
+    function hasPermissions() {
+      return "permissions" in userDoc().data;
+    }
+
+    function canEditInventory() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.inventory == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
+    }
+
+    function canEditMovement() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.movement == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
+    }
+
+    function canEditPeripherals() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.peripherals == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
+    }
+
+    function canEditWeeklyTasks() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.weeklyTasks == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
+    }
+
+    function canEditLicenses() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.licenses == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
     }
 
     function isAdminEmail() {
@@ -35,6 +80,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && (request.resource.data.role in ["admin", "padrao"])
         && (request.resource.data.access in ["edit", "view"])
+        && (!("permissions" in request.resource.data) || request.resource.data.permissions is map)
         && (request.resource.data.role != "admin" || isAdminEmail());
       allow update: if domainAllowed()
         && (
@@ -44,7 +90,12 @@ service cloud.firestore {
             && (
               request.resource.data.access == resource.data.access ||
               (!("access" in resource.data) && request.resource.data.access == "edit")
-            ))
+            )
+            && (
+              request.resource.data.permissions == resource.data.permissions ||
+              !("permissions" in resource.data)
+            )
+          )
         );
       allow delete: if isAdmin();
     }
@@ -52,35 +103,35 @@ service cloud.firestore {
     // Preferências do usuário
     match /userPreferences/{uid} {
       allow read: if domainAllowed();
-      allow create, update: if canEdit() && request.auth.uid == uid;
+      allow create, update: if domainAllowed() && request.auth.uid == uid;
       allow delete: if false;
     }
 
     // Licenças por máquina
     match /licenses-machines/{serial} {
       allow read: if domainAllowed();
-      allow create: if canEdit()
+      allow create: if canEditLicenses()
         && request.resource.id == request.resource.data.serial
         && request.resource.data.serial is string
         && request.resource.data.machine is string
         && request.resource.data.recoveryKey is string
         && request.resource.data.createdAt is timestamp;
-      allow update: if canEdit()
+      allow update: if canEditLicenses()
         && request.resource.id == resource.data.serial
         && request.resource.data.serial == resource.data.serial
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.machine is string
         && request.resource.data.recoveryKey is string;
-      allow delete: if canEdit();
+      allow delete: if canEditLicenses();
     }
 
     // Movimentações de equipamento
     match /equipment-movements/{docId} {
       allow read: if domainAllowed();
-      allow create: if canEdit() && movementIsValid();
-      allow update: if canEdit() && movementIsValid()
+      allow create: if canEditMovement() && movementIsValid();
+      allow update: if canEditMovement() && movementIsValid()
         && resource.data.criadoEm == request.resource.data.criadoEm;
-      allow delete: if canEdit();
+      allow delete: if canEditMovement();
 
       function movementIsValid() {
         return
@@ -103,24 +154,24 @@ service cloud.firestore {
     // WEEKLY TASKS por usuário: weeklytasks-<uid>
     match /weeklytasks-users/{uid}/tasks/{taskId} {
       allow read: if domainAllowed() && request.auth.uid == uid;
-      allow write: if canEdit() && request.auth.uid == uid;
+      allow write: if canEditWeeklyTasks() && request.auth.uid == uid;
     }
 
     // Estoque por escritório
     match /{officeId}/{serialId} {
       allow read: if domainAllowed()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
-      allow create: if canEdit()
+      allow create: if canEditInventory()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
         && stockValid()
         && request.resource.id == request.resource.data.serial;
-      allow update: if canEdit()
+      allow update: if canEditInventory()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
         && stockValid()
         && request.resource.id == resource.data.serial
         && request.resource.data.serial == resource.data.serial
         && resource.data.createdAt == request.resource.data.createdAt;
-      allow delete: if canEdit()
+      allow delete: if canEditInventory()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
 
       function stockValid() {
@@ -153,7 +204,7 @@ service cloud.firestore {
     // Periféricos
     match /peripherals/{docId} {
       allow read: if domainAllowed();
-      allow create, update, delete: if canEdit();
+      allow create, update, delete: if canEditPeripherals();
     }
 
     // Bloqueio padrão — deixe sempre por último
