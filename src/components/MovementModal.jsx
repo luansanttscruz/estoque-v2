@@ -23,6 +23,12 @@ import NotebookAnexoModal from "./NotebookAnexoModal";
 const tipos = ["Saida", "Entrada"];
 const statusTermo = ["Pendente", "Finalizado"];
 const statusDisponibilidade = ["Disponível", "Indisponível"];
+const contextosMovimento = [
+  "Offboarding",
+  "Onboarding",
+  "Equipamento novo no office",
+  "Troca",
+];
 const DEFAULT_MODEL_OPTIONS = [
   "MacBook Air M1",
   "Dell Latitude 5420",
@@ -65,6 +71,7 @@ export default function MovementModal({
   const [numero, setNumero] = useState(numeroSerie || "");
   const [responsavel, setResponsavel] = useState(usuario?.email || "");
   const [local, setLocal] = useState(office);
+  const [contextoMovimento, setContextoMovimento] = useState("");
   const [obs, setObs] = useState("");
   const [status, setStatus] = useState("Pendente");
   const [disponibilidade, setDisponibilidade] = useState("Disponível");
@@ -133,6 +140,7 @@ export default function MovementModal({
       );
       setResponsavel(editMovement.responsavel || usuario?.email || "");
       setLocal(editMovement.local || office);
+      setContextoMovimento(editMovement.contextoMovimento || "");
       setObs(editMovement.obs || "");
       setStatus(editMovement.status || "Pendente");
       setDisponibilidade(editMovement.disponibilidade || "Disponível");
@@ -140,12 +148,13 @@ export default function MovementModal({
       setModeloLocked(false);
     } else {
       const today = new Date().toISOString().split("T")[0];
-      setData(variant === "inventory" ? today : "");
+      setData(today);
       setTipo(variant === "inventory" ? "Entrada" : "Saida");
       setModelo("");
       setNumero(numeroSerie ? normalizeSerial(numeroSerie) : "");
       setResponsavel(usuario?.email || "");
       setLocal(office);
+      setContextoMovimento("");
       setObs("");
       setStatus("Pendente");
       setDisponibilidade(variant === "inventory" ? "Disponível" : "Disponível");
@@ -223,6 +232,8 @@ export default function MovementModal({
         disponibilidade:
           sanitized.disponibilidade || fallbackDoc?.disponibilidade,
         obs: sanitized.obs || fallbackDoc?.obs,
+        contextoMovimento:
+          sanitized.contextoMovimento || fallbackDoc?.contextoMovimento,
       });
     };
 
@@ -231,21 +242,22 @@ export default function MovementModal({
         ? docData.historico
         : [];
       if (historicoEntries.length) {
-        historicoEntries.forEach((item) => pushEntry(item, docData));
-      } else {
-        pushEntry(
-          {
-            data: docData.data,
-            tipo: docData.tipo,
-            modelo: docData.modelo,
-            numeroSerie: docData.numeroSerie,
-            responsavel: docData.responsavel,
-            local: docData.local,
-            obs: docData.obs,
-            status: docData.status,
-            disponibilidade: docData.disponibilidade,
-            email: docData.email,
-            registradoEm: docData.criadoEm,
+            historicoEntries.forEach((item) => pushEntry(item, docData));
+          } else {
+            pushEntry(
+              {
+                data: docData.data,
+                tipo: docData.tipo,
+                modelo: docData.modelo,
+                numeroSerie: docData.numeroSerie,
+                responsavel: docData.responsavel,
+                local: docData.local,
+                obs: docData.obs,
+                contextoMovimento: docData.contextoMovimento,
+                status: docData.status,
+                disponibilidade: docData.disponibilidade,
+                email: docData.email,
+                registradoEm: docData.criadoEm,
           },
           docData
         );
@@ -332,8 +344,9 @@ export default function MovementModal({
         : null;
       const previousTipo = editMovement?.tipo || null;
       const previousLocal = editMovement?.local || office;
+      const stockLocal = editMovement ? previousLocal : local || office;
       const previousCollectionName = officeToCollection(previousLocal);
-      const collectionName = officeToCollection(local || office);
+      const collectionName = officeToCollection(stockLocal);
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
       const maintainStock = variant === "inventory" || tipo !== "Saida";
@@ -394,6 +407,7 @@ export default function MovementModal({
         numeroSerie: normalizedNumero,
         responsavel,
         local,
+        contextoMovimento,
         obs: sanitizedObs,
         disponibilidade,
         criadoEm: createdAtValue,
@@ -437,6 +451,7 @@ export default function MovementModal({
           email: usuario?.email || responsavel,
           createdBy: usuario?.email || responsavel,
           updatedBy: usuario?.email || responsavel,
+          contextoMovimento,
           observacao: sanitizedObs,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
@@ -604,14 +619,12 @@ export default function MovementModal({
                       série.
                     </p>
                   )}
-                  {variant === "inventory" && (
-                    <Link
-                      to="/settings#notebook-mo adels"
-                      className="mt-2 inline-flex text-xs text-[var(--accent)] hover:underline"
-                    >
-                      Para criar um modelo, clique aqui.
-                    </Link>
-                  )}
+                  <Link
+                    to="/settings#notebook-models"
+                    className="mt-2 inline-flex text-xs text-[var(--text-muted)] hover:text-[var(--accent)] hover:underline"
+                  >
+                    Criar modelo em Configurações
+                  </Link>
                 </div>
 
                 <div>
@@ -667,6 +680,24 @@ export default function MovementModal({
                     onChange={(e) => setLocal(e.target.value)}
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm text-[var(--text-muted)]">
+                    Contexto do movimento
+                  </label>
+                  <select
+                    className="input-neon w-full"
+                    value={contextoMovimento}
+                    onChange={(e) => setContextoMovimento(e.target.value)}
+                  >
+                    <option value="">Selecione um contexto</option>
+                    {contextosMovimento.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -825,6 +856,11 @@ export default function MovementModal({
                                 </div>
                               )}
                             </div>
+                            {mov.contextoMovimento && (
+                              <div className="text-[var(--text-muted)]">
+                                Contexto: {mov.contextoMovimento}
+                              </div>
+                            )}
                             {mov.obs && (
                               <div className="text-[var(--text-muted)]">
                                 Obs: {mov.obs}

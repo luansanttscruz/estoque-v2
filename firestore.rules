@@ -151,6 +151,12 @@ service cloud.firestore {
       }
     }
 
+    // Weekly Tasks (coleção atual usada no app)
+    match /weekly-tasks/{taskId} {
+      allow read: if domainAllowed();
+      allow create, update, delete: if canEditWeeklyTasks();
+    }
+
     // WEEKLY TASKS por usuário: weeklytasks-<uid>
     match /weeklytasks-users/{uid}/tasks/{taskId} {
       allow read: if domainAllowed() && request.auth.uid == uid;

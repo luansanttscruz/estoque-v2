@@ -884,8 +884,9 @@ export default function SettingsPage() {
           </label>
           <button
             type="submit"
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
-                       px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-md border border-[var(--accent)]/50
+                       bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--accent)]
+                       hover:bg-[var(--accent)]/20 transition"
           >
             <Plus className="w-4 h-4" />
             Adicionar categoria
@@ -1014,8 +1015,9 @@ export default function SettingsPage() {
           </label>
           <button
             type="submit"
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
-                       px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-md border border-[var(--accent)]/50
+                       bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--accent)]
+                       hover:bg-[var(--accent)]/20 transition"
           >
             <Plus className="w-4 h-4" />
             Adicionar
@@ -1150,8 +1152,9 @@ export default function SettingsPage() {
               </label>
               <button
                 type="submit"
-                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
-                           px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-md border border-[var(--accent)]/50
+                           bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--accent)]
+                           hover:bg-[var(--accent)]/20 transition"
               >
                 <Tag className="w-4 h-4" />
                 Adicionar status
@@ -1197,8 +1200,9 @@ export default function SettingsPage() {
               </label>
               <button
                 type="submit"
-                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-[var(--accent)]
-                           px-4 py-2 text-sm font-semibold text-white hover:brightness-110 transition"
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-md border border-[var(--accent)]/50
+                           bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--accent)]
+                           hover:bg-[var(--accent)]/20 transition"
               >
                 <Cpu className="w-4 h-4" />
                 Adicionar modelo

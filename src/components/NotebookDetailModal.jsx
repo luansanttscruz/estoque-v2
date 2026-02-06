@@ -108,7 +108,7 @@ export default function NotebookDetailModal({
 
           if (historico.length) {
             historico.forEach((entry) => {
-              if (!entry) return;
+                if (!entry) return;
               events.push({
                 ...entry,
                 registradoEm:
@@ -119,6 +119,8 @@ export default function NotebookDetailModal({
                 status: entry.status || data.status,
                 disponibilidade:
                   entry.disponibilidade || data.disponibilidade,
+                contextoMovimento:
+                  entry.contextoMovimento || data.contextoMovimento,
               });
             });
           } else {
@@ -129,6 +131,7 @@ export default function NotebookDetailModal({
               responsavel: data.responsavel,
               status: data.status,
               disponibilidade: data.disponibilidade,
+              contextoMovimento: data.contextoMovimento,
               registradoEm: data.criadoEm,
             });
           }
@@ -179,6 +182,8 @@ export default function NotebookDetailModal({
         .filter(Boolean)
         .join(" • ")
     : null;
+  const movimentoContexto =
+    lastMovement?.contextoMovimento || notebook?.contextoMovimento || "";
 
   const availability = useMemo(() => {
     const stockTime = getTime(updatedAt || createdAt);
@@ -288,6 +293,14 @@ export default function NotebookDetailModal({
               ) : lastMovement ? (
                 <div className="mt-2 space-y-1 text-sm text-[var(--text)]">
                   <div className="font-semibold">{movementResumo || "—"}</div>
+                  {movimentoContexto && (
+                    <div className="text-xs text-[var(--text-muted)]">
+                      Contexto:{" "}
+                      <span className="text-[var(--text)]">
+                        {movimentoContexto}
+                      </span>
+                    </div>
+                  )}
                   <div className="text-xs text-[var(--text-muted)]">
                     {fmt(lastMovement.registradoEm)}
                   </div>

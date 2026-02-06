@@ -8,6 +8,12 @@ const DEFAULT_STATUSES = [
   { id: "disponivel", label: "Disponível" },
   { id: "indisponivel", label: "Indisponível" },
 ];
+const CONTEXT_OPTIONS = [
+  "Offboarding",
+  "Onboarding",
+  "Equipamento novo no office",
+  "Troca",
+];
 
 function StatusBadge({ value }) {
   const ok =
@@ -44,6 +50,7 @@ export default function NotebookEditModal({
     status: notebook?.status || DEFAULT_STATUSES[0].label,
     email: notebook?.email || "",
     observacao: notebook?.observacao || notebook?.obs || "",
+    contextoMovimento: notebook?.contextoMovimento || "",
     serial: notebook?.serial || "",
   }));
   const [saving, setSaving] = useState(false);
@@ -112,6 +119,7 @@ export default function NotebookEditModal({
         "",
       email: notebook?.email || "",
       observacao: notebook?.observacao || notebook?.obs || "",
+      contextoMovimento: notebook?.contextoMovimento || "",
       serial: notebook?.serial || "",
     });
   }, [open, notebook, statuses]);
@@ -129,6 +137,7 @@ export default function NotebookEditModal({
       status: form.status,
       email: form.email.trim(),
       observacao: form.observacao.trim(),
+      contextoMovimento: form.contextoMovimento || "",
       serial: form.serial.trim(),
       updatedAt: serverTimestamp(),
     };
@@ -231,6 +240,24 @@ export default function NotebookEditModal({
                 <StatusBadge value={form.status} />
               </div>
             </div>
+
+            <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
+              Contexto do movimento
+              <select
+                value={form.contextoMovimento}
+                onChange={(e) =>
+                  handleChange("contextoMovimento", e.target.value)
+                }
+                className="input-neon"
+              >
+                <option value="">Selecione um contexto</option>
+                {CONTEXT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
               E-mail
