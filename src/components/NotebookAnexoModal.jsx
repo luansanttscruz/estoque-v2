@@ -35,7 +35,29 @@ const buildPreviewUrl = (file) =>
     ? `https://drive.google.com/thumbnail?id=${file.id}&sz=w200-h200`
     : "");
 
-const buildViewUrl = (file) =>
+export const buildPreviewCandidates = (file) => {
+  const candidates = [];
+  const mimeType = file?.mimeType || "image/png";
+
+  if (file?.thumbnailData) {
+    candidates.push(`data:${mimeType};base64,${file.thumbnailData}`);
+  }
+  if (file?.data) {
+    candidates.push(`data:${mimeType};base64,${file.data}`);
+  }
+  if (file?.thumbnailLink) candidates.push(file.thumbnailLink);
+  if (file?.thumbnailUrl) candidates.push(file.thumbnailUrl);
+  if (file?.webContentLink) candidates.push(file.webContentLink);
+  if (file?.id) {
+    candidates.push(`https://drive.google.com/thumbnail?id=${file.id}&sz=w400`);
+    candidates.push(`https://lh3.googleusercontent.com/d/${file.id}=w400-h400`);
+    candidates.push(`https://drive.google.com/uc?export=view&id=${file.id}`);
+  }
+
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
+
+export const buildViewUrl = (file) =>
   file?.webViewLink ||
   (file?.id ? `https://drive.google.com/file/d/${file.id}/view` : "");
 
@@ -45,6 +67,34 @@ const buildPreviewSrc = (file) => {
   }
   return buildPreviewUrl(file);
 };
+
+export function ImagePreview({ file, onOpen, className = "h-24 w-24" }) {
+  const candidates = buildPreviewCandidates(file);
+  const [index, setIndex] = useState(0);
+  const src = candidates[index] || "";
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`relative overflow-hidden rounded border border-[var(--line)] bg-[var(--bg-card)] text-left ${className}`}
+      title={file.name || "Abrir imagem"}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setIndex((current) => current + 1)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center px-2 text-center text-[11px] text-[var(--text-muted)]">
+          Prévia indisponível
+        </div>
+      )}
+    </button>
+  );
+}
 
 const createMultipartBody = (metadata, file, boundary) =>
   new Blob([
@@ -80,7 +130,12 @@ const Spinner = ({ className = "" }) => (
   </span>
 );
 
-export default function NotebookAnexoModal({ serial, email, onClose }) {
+export default function NotebookAnexoModal({
+  serial,
+  email,
+  onClose,
+  onChanged,
+}) {
   const normalizedSerial = (serial || "").trim();
   const normalizedEmail = (email || "").trim();
   const [imagens, setImagens] = useState([]);
@@ -133,7 +188,6 @@ export default function NotebookAnexoModal({ serial, email, onClose }) {
 
     const provider = new GoogleAuthProvider();
     provider.addScope(DRIVE_SCOPE);
-    provider.setCustomParameters({ prompt: "consent" });
 
     const hasGoogleProvider = user.providerData.some(
       (item) => item.providerId === "google.com"
@@ -374,6 +428,7 @@ export default function NotebookAnexoModal({ serial, email, onClose }) {
       }
 
       await carregarImagens();
+      onChanged?.();
       if (inputRef.current) inputRef.current.value = "";
       showToast({
         type: "success",
@@ -421,6 +476,7 @@ export default function NotebookAnexoModal({ serial, email, onClose }) {
         }
       }
       await carregarImagens();
+      onChanged?.();
     } catch (error) {
       console.error("Erro ao excluir imagem:", error);
       showToast({
@@ -436,7 +492,7 @@ export default function NotebookAnexoModal({ serial, email, onClose }) {
     : Boolean(driveToken || localStorage.getItem(DRIVE_TOKEN_KEY));
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4">
       <div className="modal-card w-full max-w-2xl overflow-hidden">
         <div className="modal-head px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-[var(--text)] flex items-center gap-2">
@@ -501,11 +557,9 @@ export default function NotebookAnexoModal({ serial, email, onClose }) {
           <div className="flex flex-wrap gap-3">
             {imagens.map((file) => (
               <div key={file.id} className="relative group">
-                <img
-                  src={buildPreviewSrc(file)}
-                  alt={file.name || "anexo"}
-                  className="w-24 h-24 object-cover rounded cursor-pointer border border-[var(--line)]"
-                  onClick={() => visualizarImagem(file)}
+                <ImagePreview
+                  file={file}
+                  onOpen={() => visualizarImagem(file)}
                 />
                 <button
                   onClick={() => excluirImagem(file)}

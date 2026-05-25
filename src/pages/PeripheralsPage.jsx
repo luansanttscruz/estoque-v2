@@ -39,6 +39,11 @@ const OFFICES = [
 ];
 
 const APP_SETTINGS_DOC = doc(db, "appSettings", "global");
+const LOW_STOCK_LIMIT = 5;
+const isLowStock = (quantity) => {
+  const value = Number(quantity) || 0;
+  return value > 0 && value <= LOW_STOCK_LIMIT;
+};
 
 const DEFAULT_CATEGORIES = [
   { id: "headset", label: "Fones", icon: "headphones" },
@@ -557,6 +562,8 @@ export default function PeripheralsPage() {
                 : categories.slice(0, 4)
               ).map((category) => {
                 const Icon = resolveIcon(category.icon);
+                const quantity = totals[category.id] ?? 0;
+                const lowStock = isLowStock(quantity);
                 return (
                   <li key={category.id}>
                     <button
@@ -570,8 +577,13 @@ export default function PeripheralsPage() {
                           {category.label}
                         </span>
                       </div>
+                      {lowStock && !loading && (
+                        <span className="ml-auto text-xs font-semibold text-rose-400">
+                          Estoque baixo. Verificar compra.
+                        </span>
+                      )}
                       <span className="text-sm font-semibold text-[var(--text)]">
-                        {loading ? "—" : totals[category.id] ?? 0}
+                        {loading ? "—" : quantity}
                       </span>
                     </button>
                   </li>
@@ -763,6 +775,11 @@ export default function PeripheralsPage() {
                       <tr key={entry.id}>
                         <td className="px-3 py-2 text-[var(--text)]">
                           {entry.model || "—"}
+                          {isLowStock(entry.quantity) && (
+                            <div className="mt-1 text-xs font-semibold text-rose-400">
+                              Estoque baixo. Verificar compra.
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-[var(--text)]">
                           {entry.email || "—"}

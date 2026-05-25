@@ -12,6 +12,7 @@ import {
   deleteDoc,
   setDoc,
   getDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { Mail, X } from "lucide-react";
@@ -19,13 +20,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import showToast from "../utils/showToast";
 import NotebookAnexoModal from "./NotebookAnexoModal";
+import DhlQuickQuoteModal from "./DhlQuickQuoteModal";
 
-const tipos = ["Saida", "Entrada"];
+const tipos = ["Saida", "Entrada", "Transferência"];
 const statusTermo = ["Pendente", "Finalizado"];
 const statusDisponibilidade = ["Disponível", "Indisponível"];
-const contextosMovimento = [
-  "Offboarding",
+const contextoMovimentoOptions = [
   "Onboarding",
+  "Offboarding",
   "Equipamento novo no office",
   "Troca",
 ];
@@ -34,9 +36,138 @@ const DEFAULT_MODEL_OPTIONS = [
   "Dell Latitude 5420",
   "Lenovo ThinkPad L14",
 ];
+const STOCK_COLLECTIONS = [
+  "sao-paulo",
+  "rio-de-janeiro",
+  "joao-pessoa",
+  "outros",
+];
+const LOCAL_OPTIONS = [
+  { value: "São Paulo", label: "São Paulo" },
+  { value: "Rio de Janeiro", label: "Rio de Janeiro" },
+  { value: "João Pessoa", label: "João Pessoa" },
+  { value: "Outros", label: "Outro" },
+  { value: "Envio para usuário", label: "Envio para usuário" },
+];
+const DRIVE_WEBAPP_URL = process.env.REACT_APP_DRIVE_WEBAPP_URL || "";
+const USING_DRIVE_WEBAPP = Boolean(DRIVE_WEBAPP_URL);
+const API_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:3001";
+const DRIVE_WEBAPP_PROXY_URL = `${API_BASE}/api/drive-webapp`;
 
 const normalizeSerial = (value) =>
   (value || "").toString().trim().toUpperCase();
+
+const normalizeComparableValue = (value) => String(value ?? "").trim();
+
+const buildMovementComparable = (movement) => ({
+  data: normalizeComparableValue(movement?.data),
+  tipo: normalizeComparableValue(movement?.tipo),
+  modelo: normalizeComparableValue(movement?.modelo),
+  numeroSerie: normalizeSerial(movement?.numeroSerie),
+  responsavel: normalizeComparableValue(movement?.responsavel),
+  local: normalizeComparableValue(movement?.local),
+  obs: normalizeComparableValue(movement?.obs || movement?.observacao),
+  informacoesAdicionais: normalizeComparableValue(
+    movement?.informacoesAdicionais || movement?.additionalInfo,
+  ),
+  contextoMovimento: normalizeComparableValue(movement?.contextoMovimento),
+  disponibilidade: normalizeComparableValue(movement?.disponibilidade),
+  status: normalizeComparableValue(movement?.status),
+  email: normalizeComparableValue(movement?.email),
+});
+
+const hasMovementChanges = (original, current) =>
+  Object.keys(current).some((key) => original[key] !== current[key]);
+
+const getTime = (value) =>
+  typeof value?.toMillis === "function"
+    ? value.toMillis()
+    : typeof value?.toDate === "function"
+      ? value.toDate().getTime()
+      : value
+        ? new Date(value).getTime()
+        : 0;
+
+const resolveMovementModel = (records, serial) => {
+  const normalizedSerial = normalizeSerial(serial);
+  if (!normalizedSerial) return "";
+
+  const matches = [];
+  const pushMatch = (entry, fallbackDoc) => {
+    const entrySerial = normalizeSerial(
+      entry?.numeroSerie || entry?.serial || fallbackDoc?.numeroSerie,
+    );
+    const entryModel = String(
+      entry?.modelo || fallbackDoc?.modelo || "",
+    ).trim();
+    if (entrySerial !== normalizedSerial || !entryModel) return;
+    matches.push({
+      modelo: entryModel,
+      time: getTime(
+        entry?.registradoEm ||
+          entry?.criadoEm ||
+          entry?.updatedAt ||
+          entry?.data ||
+          fallbackDoc?.criadoEm,
+      ),
+    });
+  };
+
+  records.forEach((record) => {
+    const historico = Array.isArray(record?.historico) ? record.historico : [];
+    if (historico.length) {
+      historico.forEach((entry) => pushMatch(entry, record));
+    } else {
+      pushMatch(record, record);
+    }
+  });
+
+  return matches.sort((a, b) => b.time - a.time)[0]?.modelo || "";
+};
+
+const findStockEntriesBySerial = async (
+  serial,
+  collectionNames = STOCK_COLLECTIONS,
+) => {
+  const normalizedSerial = normalizeSerial(serial);
+  if (!normalizedSerial) return [];
+
+  const entriesByPath = new Map();
+
+  for (const collectionName of collectionNames) {
+    const byIdRef = doc(db, collectionName, normalizedSerial);
+    const byIdSnap = await getDoc(byIdRef);
+    if (byIdSnap.exists()) {
+      entriesByPath.set(byIdRef.path, {
+        ref: byIdRef,
+        collectionName,
+        data: byIdSnap.data(),
+      });
+    }
+
+    const bySerialSnap = await getDocs(
+      query(
+        collection(db, collectionName),
+        where("serial", "==", normalizedSerial),
+      ),
+    );
+    bySerialSnap.docs.forEach((docSnap) => {
+      entriesByPath.set(docSnap.ref.path, {
+        ref: docSnap.ref,
+        collectionName,
+        data: docSnap.data(),
+      });
+    });
+  }
+
+  return Array.from(entriesByPath.values());
+};
+
+const deleteStockEntriesBySerial = async (serial) => {
+  const entries = await findStockEntriesBySerial(serial);
+  await Promise.all(entries.map((entry) => deleteDoc(entry.ref)));
+  return entries.length;
+};
 
 const formatDate = (value, withTime = false) => {
   try {
@@ -71,20 +202,86 @@ export default function MovementModal({
   const [numero, setNumero] = useState(numeroSerie || "");
   const [responsavel, setResponsavel] = useState(usuario?.email || "");
   const [local, setLocal] = useState(office);
-  const [contextoMovimento, setContextoMovimento] = useState("");
   const [obs, setObs] = useState("");
+  const [additionalInfo, setAdditionalInfo] = useState("");
   const [status, setStatus] = useState("Pendente");
   const [disponibilidade, setDisponibilidade] = useState("Disponível");
   const [email, setEmail] = useState("");
+  const [contextoMovimento, setContextoMovimento] = useState("");
+  const [additionalInfoOpen, setAdditionalInfoOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [history, setHistory] = useState([]);
   const [modeloLocked, setModeloLocked] = useState(false);
+  const [stockLookupModel, setStockLookupModel] = useState("");
+  const [modelAutoSource, setModelAutoSource] = useState("");
   const [modelOptions, setModelOptions] = useState(DEFAULT_MODEL_OPTIONS);
   const [anexoOpen, setAnexoOpen] = useState(false);
   const [anexoSerial, setAnexoSerial] = useState("");
   const [anexoEmail, setAnexoEmail] = useState("");
+  const [anexoCount, setAnexoCount] = useState(0);
+  const [anexoCountLoading, setAnexoCountLoading] = useState(false);
+  const [anexoRefreshKey, setAnexoRefreshKey] = useState(0);
+  const [dhlQuoteOpen, setDhlQuoteOpen] = useState(false);
+  const [noChangesOpen, setNoChangesOpen] = useState(false);
   const dataRef = useRef();
   const hasModelOptions = modelOptions.length > 0;
+  const localOptions = useMemo(() => {
+    const currentLocal = String(local || "").trim();
+    if (
+      currentLocal &&
+      !LOCAL_OPTIONS.some((option) => option.value === currentLocal)
+    ) {
+      return [{ value: currentLocal, label: currentLocal }, ...LOCAL_OPTIONS];
+    }
+    return LOCAL_OPTIONS;
+  }, [local]);
+  const attachmentSerial = useMemo(
+    () => normalizeSerial(numero || numeroSerie || editMovement?.numeroSerie),
+    [editMovement?.numeroSerie, numero, numeroSerie],
+  );
+  const attachmentEmail = useMemo(
+    () =>
+      String(
+        email || editMovement?.email || responsavel || usuario?.email || "",
+      ).trim(),
+    [editMovement?.email, email, responsavel, usuario?.email],
+  );
+
+  useEffect(() => {
+    if (!open || !attachmentSerial) {
+      setAnexoCount(0);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ serial: attachmentSerial });
+    if (attachmentEmail) params.set("email", attachmentEmail);
+    const url = USING_DRIVE_WEBAPP
+      ? `${DRIVE_WEBAPP_PROXY_URL}?${params.toString()}`
+      : `${API_BASE}/api/drive-equipamentos?${params.toString()}`;
+
+    const loadAttachmentCount = async () => {
+      setAnexoCountLoading(true);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          setAnexoCount(0);
+          return;
+        }
+        const data = await response.json();
+        setAnexoCount(Array.isArray(data.files) ? data.files.length : 0);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          setAnexoCount(0);
+        }
+      } finally {
+        if (!controller.signal.aborted) setAnexoCountLoading(false);
+      }
+    };
+
+    loadAttachmentCount();
+    return () => controller.abort();
+  }, [anexoRefreshKey, attachmentEmail, attachmentSerial, open]);
 
   useEffect(() => {
     const settingsRef = doc(db, "appSettings", "global");
@@ -95,7 +292,7 @@ export default function MovementModal({
         const data = snapshot.data() || {};
         const remoteModels = Array.isArray(data?.inventory?.models)
           ? data.inventory.models.map((item) =>
-              typeof item === "string" ? item : item?.nome || item?.label || ""
+              typeof item === "string" ? item : item?.nome || item?.label || "",
             )
           : [];
 
@@ -122,7 +319,7 @@ export default function MovementModal({
           .map((value) => String(value || "").trim())
           .filter((value) => value.length > 0);
         setModelOptions(Array.from(new Set(fallback)));
-      }
+      },
     );
 
     return () => unsubscribe();
@@ -136,56 +333,87 @@ export default function MovementModal({
       setNumero(
         editMovement.numeroSerie
           ? normalizeSerial(editMovement.numeroSerie)
-          : ""
+          : "",
       );
       setResponsavel(editMovement.responsavel || usuario?.email || "");
       setLocal(editMovement.local || office);
+      setObs(editMovement.obs || editMovement.observacao || "");
+      setAdditionalInfo(
+        editMovement.informacoesAdicionais || editMovement.additionalInfo || "",
+      );
+      setAdditionalInfoOpen(
+        Boolean(
+          editMovement.informacoesAdicionais || editMovement.additionalInfo,
+        ),
+      );
       setContextoMovimento(editMovement.contextoMovimento || "");
-      setObs(editMovement.obs || "");
       setStatus(editMovement.status || "Pendente");
       setDisponibilidade(editMovement.disponibilidade || "Disponível");
       setEmail(editMovement.email || "");
       setModeloLocked(false);
+      setStockLookupModel("");
+      setModelAutoSource("");
     } else {
       const today = new Date().toISOString().split("T")[0];
-      setData(today);
+      setData(variant === "inventory" ? today : "");
       setTipo(variant === "inventory" ? "Entrada" : "Saida");
       setModelo("");
       setNumero(numeroSerie ? normalizeSerial(numeroSerie) : "");
       setResponsavel(usuario?.email || "");
       setLocal(office);
-      setContextoMovimento("");
       setObs("");
+      setAdditionalInfo("");
+      setAdditionalInfoOpen(false);
+      setContextoMovimento("");
       setStatus("Pendente");
       setDisponibilidade(variant === "inventory" ? "Disponível" : "Disponível");
       setEmail("");
       setModeloLocked(false);
+      setStockLookupModel("");
+      setModelAutoSource("");
     }
   }, [editMovement, numeroSerie, usuario, office, variant]);
+
+  useEffect(() => {
+    const detectedModel = modelo.trim();
+    if (!modeloLocked || !detectedModel) return;
+    setModelOptions((prev) =>
+      prev.includes(detectedModel) ? prev : [detectedModel, ...prev],
+    );
+  }, [modelo, modeloLocked]);
 
   useEffect(() => {
     if (editMovement) return;
     const normalizedNumero = normalizeSerial(numero);
     if (!normalizedNumero) {
+      if (modeloLocked && modelAutoSource) setModelo("");
       if (modeloLocked) setModeloLocked(false);
+      if (modelAutoSource) setModelAutoSource("");
       return;
     }
-    const existingRecord = history.find((item) => {
-      const recordSerial = normalizeSerial(item?.numeroSerie || "");
-      return recordSerial === normalizedNumero;
-    });
-    const existingModel = existingRecord?.modelo
-      ? String(existingRecord.modelo).trim()
-      : "";
+    const existingModel =
+      stockLookupModel || resolveMovementModel(history, normalizedNumero);
     if (existingModel) {
       if (modelo !== existingModel) {
         setModelo(existingModel);
       }
       if (!modeloLocked) setModeloLocked(true);
+      const nextSource = stockLookupModel ? "estoque" : "movimentações";
+      if (modelAutoSource !== nextSource) setModelAutoSource(nextSource);
     } else if (modeloLocked) {
+      if (modelAutoSource) setModelo("");
       setModeloLocked(false);
+      if (modelAutoSource) setModelAutoSource("");
     }
-  }, [history, numero, editMovement, modelo, modeloLocked]);
+  }, [
+    history,
+    numero,
+    editMovement,
+    modelo,
+    modeloLocked,
+    stockLookupModel,
+    modelAutoSource,
+  ]);
 
   useEffect(() => {
     if (open && dataRef.current) dataRef.current.focus();
@@ -199,7 +427,7 @@ export default function MovementModal({
     if (serialFilter) {
       const q = query(
         collection(db, "equipment-movements"),
-        where("numeroSerie", "==", serialFilter)
+        where("numeroSerie", "==", serialFilter),
       );
       const unsub = onSnapshot(q, (snapshot) => {
         setHistory(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -208,6 +436,73 @@ export default function MovementModal({
     }
     setHistory([]);
   }, [numero]);
+
+  useEffect(() => {
+    if (editMovement) return undefined;
+
+    const serialFilter = normalizeSerial(numero);
+    if (!serialFilter) {
+      setStockLookupModel("");
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const findStockModel = async () => {
+      try {
+        for (const collectionName of STOCK_COLLECTIONS) {
+          const byId = await getDoc(doc(db, collectionName, serialFilter));
+          if (cancelled) return;
+          const byIdData = byId.data() || {};
+          const byIdModel = String(byIdData.modelo || "").trim();
+          const byIdObservation = String(
+            byIdData.observacao || byIdData.obs || "",
+          ).trim();
+          if (byId.exists() && byIdModel) {
+            setStockLookupModel(byIdModel);
+            if (byIdObservation) {
+              setObs((current) => current || byIdObservation);
+            }
+            return;
+          }
+
+          const bySerial = await getDocs(
+            query(
+              collection(db, collectionName),
+              where("serial", "==", serialFilter),
+            ),
+          );
+          if (cancelled) return;
+          const bySerialData = bySerial.docs
+            .map((docSnap) => docSnap.data() || {})
+            .find((data) => String(data.modelo || "").trim());
+          if (bySerialData) {
+            setStockLookupModel(String(bySerialData.modelo || "").trim());
+            const bySerialObservation = String(
+              bySerialData.observacao || bySerialData.obs || "",
+            ).trim();
+            if (bySerialObservation) {
+              setObs((current) => current || bySerialObservation);
+            }
+            return;
+          }
+        }
+
+        if (!cancelled) setStockLookupModel("");
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Erro ao buscar modelo no estoque:", error);
+          setStockLookupModel("");
+        }
+      }
+    };
+
+    findStockModel();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [numero, editMovement]);
 
   const quickHistory = useMemo(() => {
     const events = [];
@@ -231,9 +526,16 @@ export default function MovementModal({
         status: sanitized.status || fallbackDoc?.status,
         disponibilidade:
           sanitized.disponibilidade || fallbackDoc?.disponibilidade,
-        obs: sanitized.obs || fallbackDoc?.obs,
-        contextoMovimento:
-          sanitized.contextoMovimento || fallbackDoc?.contextoMovimento,
+        obs:
+          sanitized.obs ||
+          sanitized.observacao ||
+          fallbackDoc?.obs ||
+          fallbackDoc?.observacao,
+        informacoesAdicionais:
+          sanitized.informacoesAdicionais ||
+          sanitized.additionalInfo ||
+          fallbackDoc?.informacoesAdicionais ||
+          fallbackDoc?.additionalInfo,
       });
     };
 
@@ -242,24 +544,25 @@ export default function MovementModal({
         ? docData.historico
         : [];
       if (historicoEntries.length) {
-            historicoEntries.forEach((item) => pushEntry(item, docData));
-          } else {
-            pushEntry(
-              {
-                data: docData.data,
-                tipo: docData.tipo,
-                modelo: docData.modelo,
-                numeroSerie: docData.numeroSerie,
-                responsavel: docData.responsavel,
-                local: docData.local,
-                obs: docData.obs,
-                contextoMovimento: docData.contextoMovimento,
-                status: docData.status,
-                disponibilidade: docData.disponibilidade,
-                email: docData.email,
-                registradoEm: docData.criadoEm,
+        historicoEntries.forEach((item) => pushEntry(item, docData));
+      } else {
+        pushEntry(
+          {
+            data: docData.data,
+            tipo: docData.tipo,
+            modelo: docData.modelo,
+            numeroSerie: docData.numeroSerie,
+            responsavel: docData.responsavel,
+            local: docData.local,
+            obs: docData.obs || docData.observacao,
+            informacoesAdicionais:
+              docData.informacoesAdicionais || docData.additionalInfo,
+            status: docData.status,
+            disponibilidade: docData.disponibilidade,
+            email: docData.email,
+            registradoEm: docData.criadoEm,
           },
-          docData
+          docData,
         );
       }
     });
@@ -268,10 +571,10 @@ export default function MovementModal({
       typeof value?.toMillis === "function"
         ? value.toMillis()
         : typeof value?.toDate === "function"
-        ? value.toDate().getTime()
-        : value
-        ? new Date(value).getTime()
-        : 0;
+          ? value.toDate().getTime()
+          : value
+            ? new Date(value).getTime()
+            : 0;
 
     return events
       .sort((a, b) => getTime(b.registradoEm) - getTime(a.registradoEm))
@@ -295,20 +598,28 @@ export default function MovementModal({
     }
     if (serial !== numero) setNumero(serial);
     setAnexoSerial(serial);
-    const loggedEmail = (usuario?.email || responsavel || "").trim();
-    setAnexoEmail(loggedEmail);
+    setAnexoEmail(attachmentEmail);
     setAnexoOpen(true);
   };
 
+  const dhlQuotePayload = useMemo(
+    () => ({
+      nome: email || responsavel || usuario?.email || "Destinatário",
+      origem: editMovement?.origem || office,
+      cidade: "",
+      cep: "",
+    }),
+    [editMovement?.origem, email, office, responsavel, usuario?.email],
+  );
+
   // mapeia office -> coleção de estoque
-  const officeToCollection = (o) =>
-    o === "São Paulo"
-      ? "sao-paulo"
-      : o === "Rio de Janeiro"
-      ? "rio-de-janeiro"
-      : o === "João Pessoa"
-      ? "joao-pessoa"
-      : "outros";
+  const officeToCollection = (o) => {
+    if (o === "São Paulo") return "sao-paulo";
+    if (o === "Rio de Janeiro") return "rio-de-janeiro";
+    if (o === "João Pessoa") return "joao-pessoa";
+    if (o === "Outros" || o === "Outro") return "outros";
+    return null;
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -339,14 +650,184 @@ export default function MovementModal({
         setNumero(normalizedNumero);
       }
 
+      const sanitizedObs = (obs || "").trim();
+      const sanitizedAdditionalInfo = (additionalInfo || "").trim();
+      const computedStatus =
+        variant !== "inventory"
+          ? status
+          : disponibilidade === "Disponível"
+            ? "Disponível"
+            : "Indisponível";
+      const currentComparable = buildMovementComparable({
+        data,
+        tipo,
+        modelo: normalizedModelo,
+        numeroSerie: normalizedNumero,
+        responsavel,
+        local,
+        obs: sanitizedObs,
+        informacoesAdicionais: sanitizedAdditionalInfo,
+        contextoMovimento,
+        disponibilidade,
+        status: computedStatus,
+        email,
+      });
+
+      if (
+        editMovement &&
+        !hasMovementChanges(
+          buildMovementComparable(editMovement),
+          currentComparable,
+        )
+      ) {
+        setNoChangesOpen(true);
+        setSaving(false);
+        return;
+      }
+
+      const isTransfer = variant !== "inventory" && tipo === "Transferência";
+      const originOffice = isTransfer ? office : editMovement?.origem || office;
+      if (isTransfer) {
+        const originCollectionName = officeToCollection(originOffice);
+        const destinationCollectionName = officeToCollection(local);
+
+        if (!originCollectionName || !destinationCollectionName) {
+          showToast({
+            type: "error",
+            message:
+              "Transferência exige origem e destino em escritórios cadastrados.",
+          });
+          setSaving(false);
+          return;
+        }
+
+        if (originCollectionName === destinationCollectionName) {
+          showToast({
+            type: "error",
+            message: "Origem e destino devem ser escritórios diferentes.",
+          });
+          setSaving(false);
+          return;
+        }
+
+        const originStockEntries = await findStockEntriesBySerial(
+          normalizedNumero,
+          [originCollectionName],
+        );
+        if (originStockEntries.length === 0) {
+          showToast({
+            type: "error",
+            message:
+              "Equipamento não encontrado no estoque da origem da transferência.",
+          });
+          setSaving(false);
+          return;
+        }
+
+        const destinationStockEntries = await findStockEntriesBySerial(
+          normalizedNumero,
+          [destinationCollectionName],
+        );
+        if (destinationStockEntries.length > 0) {
+          showToast({
+            type: "error",
+            message:
+              "Este número de série já existe no estoque do destino.",
+          });
+          setSaving(false);
+          return;
+        }
+
+        const now = Timestamp.now();
+        const transferenciaId = `${Date.now()}-${normalizedNumero}`;
+        const commonTransferPayload = {
+          data,
+          modelo: normalizedModelo,
+          numeroSerie: normalizedNumero,
+          responsavel,
+          origem: originOffice,
+          local,
+          obs: sanitizedObs,
+          observacao: sanitizedObs,
+          informacoesAdicionais: sanitizedAdditionalInfo,
+          ...(contextoMovimento ? { contextoMovimento } : {}),
+          criadoEm: now,
+          ...(email ? { email } : {}),
+          status: computedStatus,
+          transferenciaId,
+        };
+        const saidaPayload = {
+          ...commonTransferPayload,
+          tipo: "Saida",
+          disponibilidade: "Indisponível",
+          officeScope: originOffice,
+        };
+        const entradaPayload = {
+          ...commonTransferPayload,
+          tipo: "Entrada",
+          disponibilidade: "Disponível",
+          officeScope: local,
+        };
+        const buildTransferHistory = (payload, role) => ({
+          ...payload,
+          registradoEm: now,
+          usuario: usuario?.email || responsavel,
+          acao: role === "saida" ? "Transferência - Saída" : "Transferência - Entrada",
+        });
+
+        const destinationStockRef = doc(
+          db,
+          destinationCollectionName,
+          normalizedNumero,
+        );
+        const transferBatch = writeBatch(db);
+        transferBatch.set(doc(collection(db, "equipment-movements")), {
+          ...saidaPayload,
+          historico: [buildTransferHistory(saidaPayload, "saida")],
+        });
+        transferBatch.set(doc(collection(db, "equipment-movements")), {
+          ...entradaPayload,
+          historico: [buildTransferHistory(entradaPayload, "entrada")],
+        });
+        originStockEntries.forEach((entry) => {
+          transferBatch.delete(entry.ref);
+        });
+        transferBatch.set(destinationStockRef, {
+          ...(originStockEntries[0]?.data || {}),
+          serial: normalizedNumero,
+          modelo: normalizedModelo,
+          status: "Disponivel",
+          email: email || originStockEntries[0]?.data?.email || usuario?.email || responsavel,
+          createdBy:
+            originStockEntries[0]?.data?.createdBy || usuario?.email || responsavel,
+          updatedBy: usuario?.email || responsavel,
+          observacao: sanitizedObs,
+          obs: sanitizedObs,
+          createdAt: originStockEntries[0]?.data?.createdAt || now,
+          transferredFrom: originOffice,
+          transferredAt: now,
+          updatedAt: now,
+        });
+        await transferBatch.commit();
+
+        showToast({
+          type: "success",
+          message: "Transferência registrada e estoque atualizado.",
+          duration: 4500,
+        });
+        onClose?.();
+        return;
+      }
+
       const previousSerial = editMovement?.numeroSerie
         ? normalizeSerial(editMovement.numeroSerie)
         : null;
       const previousTipo = editMovement?.tipo || null;
       const previousLocal = editMovement?.local || office;
-      const stockLocal = editMovement ? previousLocal : local || office;
-      const previousCollectionName = officeToCollection(previousLocal);
-      const collectionName = officeToCollection(stockLocal);
+      const previousCollectionName =
+        officeToCollection(previousLocal) || officeToCollection(office);
+      const collectionName =
+        officeToCollection(local) || officeToCollection(office) || "outros";
       const currentStockRef = doc(db, collectionName, normalizedNumero);
 
       const maintainStock = variant === "inventory" || tipo !== "Saida";
@@ -360,21 +841,20 @@ export default function MovementModal({
         disponibilidade === "Disponível" ? "Disponivel" : "Indisponivel";
 
       if (maintainStock) {
-        if (previousMaintained && !isSameLocation) {
-          try {
-            await deleteDoc(doc(db, previousCollectionName, previousSerial));
-          } catch (err) {
-            const q = query(
-              collection(db, previousCollectionName),
-              where("serial", "==", previousSerial)
-            );
-            const snap = await getDocs(q);
-            await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-          }
+        if (previousMaintained && !isSameLocation && previousSerial) {
+          await deleteStockEntriesBySerial(previousSerial);
         }
 
-        const existingStock = await getDoc(currentStockRef);
-        if (existingStock.exists() && !isSameLocation) {
+        const existingStockEntries =
+          await findStockEntriesBySerial(normalizedNumero);
+        const conflictingStockEntry = existingStockEntries.find((entry) => {
+          const isCurrentEditTarget =
+            editMovement &&
+            isSameLocation &&
+            entry.ref.path === currentStockRef.path;
+          return !isCurrentEditTarget;
+        });
+        if (conflictingStockEntry) {
           showToast({
             type: "error",
             message:
@@ -383,21 +863,7 @@ export default function MovementModal({
           setSaving(false);
           return;
         }
-      } else if (previousMaintained) {
-        try {
-          await deleteDoc(doc(db, previousCollectionName, previousSerial));
-        } catch (err) {
-          const q = query(
-            collection(db, previousCollectionName),
-            where("serial", "==", previousSerial)
-          );
-          const snap = await getDocs(q);
-          await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
-        }
       }
-
-      // payload base
-      const sanitizedObs = (obs || "").trim();
 
       const createdAtValue = editMovement?.criadoEm || Timestamp.now();
       const payload = {
@@ -406,18 +872,16 @@ export default function MovementModal({
         modelo: normalizedModelo,
         numeroSerie: normalizedNumero,
         responsavel,
+        origem: editMovement?.origem || office,
         local,
-        contextoMovimento,
         obs: sanitizedObs,
+        observacao: sanitizedObs,
+        informacoesAdicionais: sanitizedAdditionalInfo,
+        ...(contextoMovimento ? { contextoMovimento } : {}),
         disponibilidade,
         criadoEm: createdAtValue,
         ...(email ? { email } : {}),
-        status:
-          variant !== "inventory"
-            ? status
-            : disponibilidade === "Disponível"
-            ? "Disponível"
-            : "Indisponível",
+        status: computedStatus,
       };
 
       const historyEntry = {
@@ -451,21 +915,15 @@ export default function MovementModal({
           email: usuario?.email || responsavel,
           createdBy: usuario?.email || responsavel,
           updatedBy: usuario?.email || responsavel,
-          contextoMovimento,
           observacao: sanitizedObs,
+          obs: sanitizedObs,
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
         });
       } else {
-        try {
-          await deleteDoc(currentStockRef);
-        } catch (err) {
-          const q = query(
-            collection(db, collectionName),
-            where("serial", "==", normalizedNumero)
-          );
-          const snap = await getDocs(q);
-          await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+        await deleteStockEntriesBySerial(normalizedNumero);
+        if (previousMaintained && previousSerial !== normalizedNumero) {
+          await deleteStockEntriesBySerial(previousSerial);
         }
       }
 
@@ -615,16 +1073,19 @@ export default function MovementModal({
                   )}
                   {modeloLocked && (
                     <p className="text-xs text-[var(--text-muted)] mt-1">
-                      Modelo detectado automaticamente para este número de
-                      série.
+                      Modelo detectado automaticamente
+                      {modelAutoSource ? ` em ${modelAutoSource}` : ""} para
+                      este número de série.
                     </p>
                   )}
-                  <Link
-                    to="/settings#notebook-models"
-                    className="mt-2 inline-flex text-xs text-[var(--text-muted)] hover:text-[var(--accent)] hover:underline"
-                  >
-                    Criar modelo em Configurações
-                  </Link>
+                  {variant === "inventory" && (
+                    <Link
+                      to="/settings#notebook-mo adels"
+                      className="mt-2 inline-flex text-xs text-[var(--accent)] hover:underline"
+                    >
+                      Para criar um modelo, clique aqui.
+                    </Link>
+                  )}
                 </div>
 
                 <div>
@@ -674,43 +1135,87 @@ export default function MovementModal({
                   <label className="block mb-1 text-sm text-[var(--text-muted)]">
                     Local de recebimento/Destino
                   </label>
-                  <input
+                  <select
                     className="input-neon w-full"
                     value={local}
                     onChange={(e) => setLocal(e.target.value)}
                     required
-                  />
-                </div>
-
-                <div>
-                  <label className="block mb-1 text-sm text-[var(--text-muted)]">
-                    Contexto do movimento
-                  </label>
-                  <select
-                    className="input-neon w-full"
-                    value={contextoMovimento}
-                    onChange={(e) => setContextoMovimento(e.target.value)}
                   >
-                    <option value="">Selecione um contexto</option>
-                    {contextosMovimento.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
+                    <option value="">Selecione uma opção</option>
+                    {localOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {variant !== "inventory" && (
+                  <div>
+                    <label className="block mb-1 text-sm text-[var(--text-muted)]">
+                      Tipo de movimentação
+                    </label>
+                    <select
+                      className="input-neon w-full"
+                      value={contextoMovimento}
+                      onChange={(e) => setContextoMovimento(e.target.value)}
+                      required
+                    >
+                      <option value="">Selecione uma opção</option>
+                      {contextoMovimentoOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="sm:col-span-2">
                   <label className="block mb-1 text-sm text-[var(--text-muted)]">
-                    Observações
+                    Observação
                   </label>
                   <textarea
-                    className="input-neon w-full min-h-[120px] resize-y"
+                    className="input-neon w-full min-h-[88px] resize-y"
                     value={obs}
                     onChange={(e) => setObs(e.target.value)}
-                    rows={4}
-                    placeholder="Detalhes adicionais sobre o equipamento"
+                    rows={3}
+                    placeholder="Observação do equipamento."
                   />
+                </div>
+
+                <div className="sm:col-span-2 rounded-xl border border-[var(--line)] bg-[var(--bg-card)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setAdditionalInfoOpen((current) => !current)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-[var(--text)] transition hover:bg-white/5"
+                  >
+                    <span>
+                      Informações adicionais
+                      <span className="ml-2 text-xs text-[var(--text-muted)]">
+                        opcional
+                      </span>
+                    </span>
+                    <span className="text-xs text-[var(--accent)]">
+                      {additionalInfoOpen
+                        ? "Ocultar"
+                        : additionalInfo
+                          ? "Editar"
+                          : "Adicionar"}
+                    </span>
+                  </button>
+
+                  {additionalInfoOpen && (
+                    <div className="border-t border-[var(--line)] p-3">
+                      <textarea
+                        className="input-neon w-full min-h-[96px] resize-y"
+                        value={additionalInfo}
+                        onChange={(e) => setAdditionalInfo(e.target.value)}
+                        rows={3}
+                        placeholder="Informações complementares desta movimentação. Campo opcional."
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {variant !== "inventory" && (
@@ -760,9 +1265,17 @@ export default function MovementModal({
                 <button
                   type="button"
                   onClick={handleOpenAnexos}
-                  className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
+                  className="relative px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
                 >
                   Adicionar imagens
+                  {anexoCount > 0 && (
+                    <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-[var(--bg-card)] bg-[var(--accent)] px-1.5 text-[11px] font-semibold leading-none text-white">
+                      {anexoCount}
+                    </span>
+                  )}
+                  {anexoCountLoading && anexoCount === 0 && (
+                    <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-[var(--accent)]" />
+                  )}
                 </button>
               </div>
             </form>
@@ -795,7 +1308,7 @@ export default function MovementModal({
                               <span className="font-semibold text-sm">
                                 {formatDate(
                                   mov.registradoEm || mov.criadoEm,
-                                  true
+                                  true,
                                 )}
                               </span>
                               <span
@@ -856,14 +1369,14 @@ export default function MovementModal({
                                 </div>
                               )}
                             </div>
-                            {mov.contextoMovimento && (
-                              <div className="text-[var(--text-muted)]">
-                                Contexto: {mov.contextoMovimento}
-                              </div>
-                            )}
                             {mov.obs && (
                               <div className="text-[var(--text-muted)]">
                                 Obs: {mov.obs}
+                              </div>
+                            )}
+                            {mov.informacoesAdicionais && (
+                              <div className="text-[var(--text-muted)]">
+                                Info adicionais: {mov.informacoesAdicionais}
                               </div>
                             )}
                           </div>
@@ -877,7 +1390,14 @@ export default function MovementModal({
           </div>
 
           {/* Rodapé */}
-          <div className="px-6 py-3 border-t border-[var(--line)] bg-[var(--bg-card)] flex items-center justify-end">
+          <div className="px-6 py-3 border-t border-[var(--line)] bg-[var(--bg-card)] flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => setDhlQuoteOpen(true)}
+              className="inline-flex items-center justify-center rounded-lg border border-[var(--accent)]/50 bg-[var(--accent)]/10 px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent)]/20"
+            >
+              Consultar envio
+            </button>
             <button
               onClick={onClose}
               className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)]
@@ -892,8 +1412,50 @@ export default function MovementModal({
         <NotebookAnexoModal
           serial={anexoSerial}
           email={anexoEmail}
-          onClose={() => setAnexoOpen(false)}
+          onChanged={() => setAnexoRefreshKey((value) => value + 1)}
+          onClose={() => {
+            setAnexoOpen(false);
+            setAnexoRefreshKey((value) => value + 1);
+          }}
         />
+      )}
+      {dhlQuoteOpen && (
+        <DhlQuickQuoteModal
+          onboarding={dhlQuotePayload}
+          onClose={() => setDhlQuoteOpen(false)}
+        />
+      )}
+      {noChangesOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.96, y: 12 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.96, y: 12 }}
+            className="w-full max-w-sm rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-5 shadow-xl"
+          >
+            <h3 className="text-lg font-semibold text-[var(--text)]">
+              Nenhuma alteração encontrada
+            </h3>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Revise os campos e altere pelo menos uma informação antes de
+              salvar.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setNoChangesOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
+              >
+                Entendi
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

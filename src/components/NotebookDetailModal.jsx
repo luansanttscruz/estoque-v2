@@ -2,9 +2,28 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { X, Mail, Info, CheckCircle2, XCircle, Cpu, Hash } from "lucide-react";
+import {
+  X,
+  Mail,
+  Info,
+  CheckCircle2,
+  XCircle,
+  Cpu,
+  Hash,
+  Image as ImageIcon,
+  Paperclip,
+} from "lucide-react";
 import { db } from "../firebase";
 import { getTime, resolveAvailability } from "../utils/availability";
+import NotebookAnexoModal, {
+  ImagePreview,
+  buildViewUrl,
+} from "./NotebookAnexoModal";
+
+const DRIVE_WEBAPP_URL = process.env.REACT_APP_DRIVE_WEBAPP_URL || "";
+const USING_DRIVE_WEBAPP = Boolean(DRIVE_WEBAPP_URL);
+const API_BASE = process.env.REACT_APP_API_BASE_URL || "http://localhost:3001";
+const DRIVE_WEBAPP_PROXY_URL = `${API_BASE}/api/drive-webapp`;
 
 function Badge({ ok, children }) {
   const isUnknown = ok == null;
@@ -67,8 +86,10 @@ export default function NotebookDetailModal({
   const navigate = useNavigate();
   const [lastMovement, setLastMovement] = useState(null);
   const [movementLoading, setMovementLoading] = useState(false);
-
-  if (!open) return null;
+  const [images, setImages] = useState([]);
+  const [imagesLoading, setImagesLoading] = useState(false);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [attachmentsRefreshKey, setAttachmentsRefreshKey] = useState(0);
 
   const {
     modelo,
@@ -162,6 +183,44 @@ export default function NotebookDetailModal({
     };
   }, [open, serial]);
 
+  useEffect(() => {
+    const serialValue = normalizeSerial(serial);
+    if (!open || !serialValue) {
+      setImages([]);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ serial: serialValue });
+    if (email) params.set("email", email);
+    const url = USING_DRIVE_WEBAPP
+      ? `${DRIVE_WEBAPP_PROXY_URL}?${params.toString()}`
+      : `${API_BASE}/api/drive-equipamentos?${params.toString()}`;
+
+    const loadImages = async () => {
+      setImagesLoading(true);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          setImages([]);
+          return;
+        }
+        const data = await response.json();
+        setImages(Array.isArray(data.files) ? data.files : []);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.error("Erro ao carregar imagens do estoque:", error);
+          setImages([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) setImagesLoading(false);
+      }
+    };
+
+    loadImages();
+    return () => controller.abort();
+  }, [attachmentsRefreshKey, email, open, serial]);
+
   const movementLink = useMemo(() => {
     const serialValue = normalizeSerial(serial);
     const officeValue = lastMovement?.local || office;
@@ -198,6 +257,8 @@ export default function NotebookDetailModal({
 
   const availabilityLabel = availability?.label || status || "—";
   const availabilityOk = availability?.ok;
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
@@ -259,6 +320,52 @@ export default function NotebookDetailModal({
               <p className="text-sm mt-2 text-[var(--text)] whitespace-pre-wrap">
                 {observacao || "—"}
               </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-card)] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide font-semibold flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-[var(--accent)]" />
+                  Imagens anexadas
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttachmentsOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition hover:bg-white/5"
+                >
+                  <Paperclip className="h-3.5 w-3.5 text-[var(--accent)]" />
+                  Adicionar imagens
+                  {images.length > 0 && (
+                    <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] leading-none text-white">
+                      {images.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {imagesLoading ? (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Carregando imagens...
+                </p>
+              ) : images.length ? (
+                <div className="flex flex-wrap gap-3">
+                  {images.map((file) => (
+                    <ImagePreview
+                      key={file.id || file.name}
+                      file={file}
+                      className="h-20 w-20"
+                      onOpen={() => {
+                        const url = buildViewUrl(file);
+                        if (url) window.open(url, "_blank");
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Nenhuma imagem anexada ainda.
+                </p>
+              )}
             </div>
 
             <div
@@ -347,6 +454,20 @@ export default function NotebookDetailModal({
             </div>
           </div>
         </div>
+
+        {attachmentsOpen && (
+          <NotebookAnexoModal
+            serial={normalizeSerial(serial)}
+            email={email || ""}
+            onChanged={() =>
+              setAttachmentsRefreshKey((current) => current + 1)
+            }
+            onClose={() => {
+              setAttachmentsOpen(false);
+              setAttachmentsRefreshKey((current) => current + 1);
+            }}
+          />
+        )}
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-[var(--line)] bg-[var(--bg-soft)]/60 flex justify-end gap-2">

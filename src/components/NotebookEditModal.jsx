@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { updateDoc, doc, serverTimestamp, onSnapshot } from "firebase/firestore";
+import {
+  updateDoc,
+  doc,
+  serverTimestamp,
+  onSnapshot,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { X, Save, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 import showToast from "../utils/showToast";
@@ -137,6 +146,7 @@ export default function NotebookEditModal({
       status: form.status,
       email: form.email.trim(),
       observacao: form.observacao.trim(),
+      obs: form.observacao.trim(),
       contextoMovimento: form.contextoMovimento || "",
       serial: form.serial.trim(),
       updatedAt: serverTimestamp(),
@@ -154,6 +164,32 @@ export default function NotebookEditModal({
     setSaving(true);
     try {
       await updateDoc(doc(db, collectionName, notebook.id), payload);
+      const serialsToSync = Array.from(
+        new Set(
+          [payload.serial, notebook?.serial]
+            .map((value) => String(value || "").trim().toUpperCase())
+            .filter(Boolean)
+        )
+      );
+
+      await Promise.all(
+        serialsToSync.map(async (serialValue) => {
+          const snap = await getDocs(
+            query(
+              collection(db, "equipment-movements"),
+              where("numeroSerie", "==", serialValue)
+            )
+          );
+          return Promise.all(
+            snap.docs.map((docSnap) =>
+              updateDoc(docSnap.ref, {
+                obs: payload.observacao,
+                observacao: payload.observacao,
+              })
+            )
+          );
+        })
+      );
       showToast({
         type: "success",
         message: "Notebook atualizado com sucesso.",

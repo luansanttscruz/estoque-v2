@@ -11,7 +11,6 @@ import { signInWithPopup } from "firebase/auth";
 const provider = new GoogleAuthProvider();
 const DRIVE_TOKEN_KEY = "googleDriveAccessToken";
 provider.addScope("https://www.googleapis.com/auth/drive");
-provider.setCustomParameters({ prompt: "consent" });
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -45,8 +44,6 @@ export default function Login() {
       const accessToken = credential?.accessToken;
       if (accessToken) {
         localStorage.setItem(DRIVE_TOKEN_KEY, accessToken);
-      } else {
-        localStorage.removeItem(DRIVE_TOKEN_KEY);
       }
       const email = result.user.email;
   

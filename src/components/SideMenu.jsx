@@ -4,8 +4,10 @@ import {
   Home,
   Laptop,
   Boxes,
+  BarChart3,
   FileText,
   Truck,
+  Calculator,
   ListChecks,
   Settings,
   KeyRound,
@@ -55,12 +57,14 @@ export default function SideMenu({ collapsed = false }) {
 
   const principal = [
     { to: "/", label: "Início", icon: Home },
+    { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
     { to: "/inventory", label: "Notebook Stock", icon: Laptop },
     { to: "/peripherals", label: "Peripherals", icon: Boxes },
     { to: "/onboarding", label: "Onboarding", icon: FileText },
     { to: "/docs", label: "Documentation", icon: FileText },
     { to: "/weekly-tasks", label: "Weekly Tasks", icon: ListChecks },
     { to: "/equipment-movement", label: "Equipment Movement", icon: Truck },
+    { to: "/cotacao-rapida", label: "Cotação rápida", icon: Calculator },
   ];
 
   const extras = [

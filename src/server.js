@@ -7,7 +7,11 @@ const { google } = require("googleapis");
 const { Readable } = require("stream");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const { gerarXmlCotacao } = require("../api/cotacao-dhl/dhlProxy");
+const {
+  gerarXmlCotacao,
+  normalizeCep,
+  parseDhlQuoteResponse,
+} = require("../api/cotacao-dhl/dhlProxy");
 
 // Carregar variáveis do .env
 dotenv.config();
@@ -20,6 +24,14 @@ const DRIVE_BASE_FOLDER_ID =
   process.env.GOOGLE_DRIVE_BASE_FOLDER_ID ||
   "1cTYLAyW4_MElse2WCJuesP1UWE3OhPrY";
 const DRIVE_WEBAPP_API_KEY = process.env.DRIVE_WEBAPP_API_KEY || "";
+const DHL_UNAVAILABLE_MESSAGE =
+  "Indisponível para essa região. Consulte através do site da DHL.";
+const DHL_UNAVAILABLE_CEPS = new Set(
+  (process.env.DHL_UNAVAILABLE_CEPS || "22451630")
+    .split(",")
+    .map(normalizeCep)
+    .filter(Boolean)
+);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -126,15 +138,54 @@ app.post("/api/teste", (req, res) => {
 
 // 📦 Cotação Rápida DHL
 app.post("/api/cotacao-dhl", async (req, res) => {
-  const { cidade, cep, valorDeclarado, peso } = req.body;
+  const { origem, destino, valorDeclarado, peso } = req.body;
+  const cidade = destino?.cidade || req.body.cidade;
+  const cep = normalizeCep(destino?.cep || req.body.cep);
+  const origemNormalizada = origem
+    ? { ...origem, cep: normalizeCep(origem.cep) }
+    : null;
 
-  if (!cidade || !cep || !valorDeclarado || !peso) {
-    return res.status(400).json({ erro: "Dados obrigatórios ausentes." });
+  if (!cidade || cep.length !== 8 || !valorDeclarado || !peso) {
+    return res.status(400).json({
+      erro:
+        "Dados obrigatórios ausentes ou inválidos. Informe cidade, CEP, valor declarado e peso.",
+    });
+  }
+  if (origemNormalizada?.cep && origemNormalizada.cep.length !== 8) {
+    return res.status(400).json({
+      erro: "CEP de origem inválido.",
+    });
+  }
+  if (DHL_UNAVAILABLE_CEPS.has(cep)) {
+    return res.status(200).json({
+      available: false,
+      mensagem: DHL_UNAVAILABLE_MESSAGE,
+    });
+  }
+  if (
+    !process.env.DHL_ENDPOINT ||
+    !process.env.DHL_SITE_ID ||
+    !process.env.DHL_PASSWORD
+  ) {
+    return res.status(500).json({
+      erro:
+        "Credenciais DHL ausentes. Configure DHL_ENDPOINT, DHL_SITE_ID e DHL_PASSWORD no backend.",
+    });
   }
 
   try {
     // Gerar XML para DHL
-    const xmlCotacao = gerarXmlCotacao({ cidade, cep, valorDeclarado, peso });
+    const xmlCotacao = gerarXmlCotacao({
+      cidade,
+      cep,
+      valorDeclarado,
+      peso,
+      origem: origemNormalizada,
+      dataEnvio: req.body.dataEnvio,
+      altura: req.body.altura,
+      largura: req.body.largura,
+      comprimento: req.body.comprimento,
+    });
 
     // Enviar para DHL
     const response = await fetch(process.env.DHL_ENDPOINT, {
@@ -146,27 +197,29 @@ app.post("/api/cotacao-dhl", async (req, res) => {
     const respostaTexto = await response.text();
     console.log("Resposta da DHL:", respostaTexto);
 
-    // Extrair preço e prazo da resposta
-    const matchPreco = respostaTexto.match(
-      /<ShippingCharge>(.*?)<\/ShippingCharge>/
-    );
-    const matchEntrega = respostaTexto.match(
-      /<EstimatedDeliveryDate>(.*?)<\/EstimatedDeliveryDate>/
-    );
-
-    const preco = matchPreco ? matchPreco[1] : null;
-    const entrega = matchEntrega ? matchEntrega[1] : null;
-
-    if (!preco || !entrega) {
-      return res
-        .status(400)
-        .json({ erro: "Não foi possível extrair preço ou prazo da DHL." });
+    if (!response.ok) {
+      return res.status(response.status).json({
+        erro: "A DHL recusou a cotação.",
+        detalhe: respostaTexto.slice(0, 500),
+      });
     }
 
-    res.status(200).json({ preco, entrega });
+    const parsedQuote = parseDhlQuoteResponse(respostaTexto);
+    if (!parsedQuote.available) {
+      return res.status(200).json({
+        available: false,
+        mensagem: parsedQuote.mensagem,
+        detalhe: respostaTexto.slice(0, 500),
+      });
+    }
+
+    res.status(200).json(parsedQuote);
   } catch (error) {
     console.error("Erro na cotação DHL:", error);
-    res.status(500).send("Erro interno ao cotar.");
+    res.status(500).json({
+      erro: "Erro interno ao cotar.",
+      detalhe: error?.message,
+    });
   }
 });
 

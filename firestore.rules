@@ -42,6 +42,10 @@ service cloud.firestore {
         );
     }
 
+    function canEditStock() {
+      return canEditInventory() || canEditMovement();
+    }
+
     function canEditPeripherals() {
       return domainAllowed()
         && (
@@ -143,6 +147,7 @@ service cloud.firestore {
           (request.resource.data.numeroSerie is string) &&
           (request.resource.data.responsavel is string) &&
           (request.resource.data.local is string) &&
+          (!('localDescricao' in request.resource.data) || request.resource.data.localDescricao is string) &&
           (request.resource.data.criadoEm is timestamp) &&
           (!('obs' in request.resource.data) || request.resource.data.obs is string) &&
           (!('email' in request.resource.data) || request.resource.data.email is string) &&
@@ -167,17 +172,17 @@ service cloud.firestore {
     match /{officeId}/{serialId} {
       allow read: if domainAllowed()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
-      allow create: if canEditInventory()
+      allow create: if canEditStock()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
         && stockValid()
         && request.resource.id == request.resource.data.serial;
-      allow update: if canEditInventory()
+      allow update: if canEditStock()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros']
         && stockValid()
         && request.resource.id == resource.data.serial
         && request.resource.data.serial == resource.data.serial
         && resource.data.createdAt == request.resource.data.createdAt;
-      allow delete: if canEditInventory()
+      allow delete: if canEditStock()
         && officeId in ['sao-paulo','rio-de-janeiro','joao-pessoa','outros'];
 
       function stockValid() {

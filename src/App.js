@@ -18,11 +18,13 @@ import SideMenu from "./components/SideMenu";
 import { SidebarContext } from "./context/SidebarContext";
 
 import Menu from "./pages/Menu";
+import DashboardPage from "./pages/DashboardPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import DocsPage from "./pages/DocsPage";
 import ImportarOnboardings from "./pages/ImportarOnboardings";
 import WeeklyTasks from "./pages/WeeklyTasks";
 import EquipmentMovement from "./pages/EquipmentMovement";
+import DhlQuickQuotePage from "./pages/DhlQuickQuotePage";
 import FinalizadasPage from "./pages/FinalizadasPage";
 import MovementListPage from "./pages/MovementListPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -229,6 +231,14 @@ function App() {
 
           {/* Rotas existentes (mantidas) */}
           <Route
+            path="/dashboard"
+            element={
+              <RotaPrivada>
+                <DashboardPage />
+              </RotaPrivada>
+            }
+          />
+          <Route
             path="/inventory"
             element={
               <RotaPrivada>
@@ -322,6 +332,14 @@ function App() {
             element={
               <RotaPrivada>
                 <EquipmentMovement />
+              </RotaPrivada>
+            }
+          />
+          <Route
+            path="/cotacao-rapida"
+            element={
+              <RotaPrivada>
+                <DhlQuickQuotePage />
               </RotaPrivada>
             }
           />

@@ -73,6 +73,37 @@ const formatCommentTime = (value) => {
   }
 };
 
+const formatTaskDate = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    return raw;
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("pt-BR");
+  }
+  return raw;
+};
+
+const parseTaskDate = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00`);
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+    const [day, month, year] = raw.split("/");
+    return new Date(`${year}-${month}-${day}T00:00:00`);
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const renderAvatar = (person, sizeClass) => {
   const label = person.nome || person.email || "Usuário";
   return (
@@ -110,7 +141,13 @@ export default function WeeklyTasks() {
   const [editingSaving, setEditingSaving] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const [dragOverStatus, setDragOverStatus] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [relationshipFilter, setRelationshipFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const { usuario, canEditModule, isAdmin } = useAuth();
   const canEditTasks = canEditModule("weeklyTasks");
   const normalizedEmail = (value) => String(value || "").trim().toLowerCase();
@@ -208,13 +245,9 @@ export default function WeeklyTasks() {
       });
       return;
     }
-    if (!window.confirm("Tem certeza que deseja excluir esta atividade?"))
-      return;
-    await deleteDoc(doc(db, "weekly-tasks", id));
-    showToast({
-      type: "info",
-      message: "Atividade removida.",
-    });
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+    setConfirmAction({ type: "delete", task });
   };
 
   const handleConclude = async (task) => {
@@ -241,13 +274,101 @@ export default function WeeklyTasks() {
       em_andamento: [],
       concluida: [],
     };
-    const visibleTasks = isAdmin ? tasks : tasks.filter((task) => canSeeTask(task));
-    visibleTasks.forEach((task) => {
+    const visibleTasks = isAdmin
+      ? tasks
+      : tasks.filter((task) => canSeeTask(task));
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const today = new Date();
+    const startOfToday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    const startOfWeek = new Date(startOfToday);
+    startOfWeek.setDate(startOfToday.getDate() - (startOfToday.getDay() || 7) + 1);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+    const filteredTasks = visibleTasks.filter((task) => {
+      if (priorityFilter !== "all" && task.prioridade !== priorityFilter) {
+        return false;
+      }
+      const normalizedStatus = normalizeStatus(task.status);
+      if (statusFilter !== "all" && normalizedStatus !== statusFilter) {
+        return false;
+      }
+      if (relationshipFilter === "owner" && !isTaskOwner(task)) {
+        return false;
+      }
+      if (relationshipFilter === "assignee" && !isTaskAssignee(task)) {
+        return false;
+      }
+      if (dateFilter !== "all") {
+        const date = parseTaskDate(task.data);
+        if (dateFilter === "nodate" && date) return false;
+        if (dateFilter !== "nodate" && !date) return false;
+        if (date) {
+          const startOfDate = new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate()
+          );
+          if (
+            dateFilter === "today" &&
+            startOfDate.getTime() !== startOfToday.getTime()
+          ) {
+            return false;
+          }
+          if (
+            dateFilter === "week" &&
+            (startOfDate < startOfWeek || startOfDate > endOfWeek)
+          ) {
+            return false;
+          }
+          if (dateFilter === "overdue" && startOfDate >= startOfToday) {
+            return false;
+          }
+        }
+      }
+      if (normalizedSearch) {
+        const assignees = Array.isArray(task.assignees) ? task.assignees : [];
+        const commentTexts = Array.isArray(task.comments)
+          ? task.comments.map((comment) => comment.text || "").join(" ")
+          : "";
+        const haystack = [
+          task.atividade,
+          task.responsavel,
+          task.prioridade,
+          task.data,
+          assignees.map((person) => person.nome).join(" "),
+          assignees.map((person) => person.email).join(" "),
+          commentTexts,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+      return true;
+    });
+    filteredTasks.forEach((task) => {
       const status = normalizeStatus(task.status);
       base[status].push(task);
     });
     return base;
-  }, [tasks, isAdmin, usuario?.uid, usuario?.email]);
+  }, [
+    tasks,
+    isAdmin,
+    usuario?.uid,
+    usuario?.email,
+    searchTerm,
+    priorityFilter,
+    statusFilter,
+    relationshipFilter,
+    dateFilter,
+  ]);
 
   const updateStatus = async (task, nextStatus) => {
     if (!canEditTasks) {
@@ -445,8 +566,38 @@ export default function WeeklyTasks() {
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return;
     if (normalizeStatus(task.status) === statusKey) return;
-    await updateStatus(task, statusKey);
     setDraggingTaskId(null);
+    setConfirmAction({ type: "move", task, nextStatus: statusKey });
+  };
+
+  const closeConfirmAction = () => {
+    setConfirmAction(null);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { type, task, nextStatus } = confirmAction;
+    try {
+      if (type === "delete") {
+        await deleteDoc(doc(db, "weekly-tasks", task.id));
+        showToast({
+          type: "info",
+          message: "Atividade removida.",
+        });
+      } else if (type === "move") {
+        await updateStatus(task, nextStatus);
+      }
+    } finally {
+      setConfirmAction(null);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setPriorityFilter("all");
+    setStatusFilter("all");
+    setRelationshipFilter("all");
+    setDateFilter("all");
   };
 
   return (
@@ -467,6 +618,66 @@ export default function WeeklyTasks() {
           Nova Atividade
         </button>
       </header>
+
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-lg p-4 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <input
+            type="text"
+            className="input-neon w-full"
+            placeholder="Buscar tarefa, responsável ou comentário"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+          <select
+            className="input-neon w-full"
+            value={priorityFilter}
+            onChange={(event) => setPriorityFilter(event.target.value)}
+          >
+            <option value="all">Todas prioridades</option>
+            <option value="Alta">Alta</option>
+            <option value="Média">Média</option>
+            <option value="Baixa">Baixa</option>
+          </select>
+          <select
+            className="input-neon w-full"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">Todos os status</option>
+            <option value="pendente">{STATUS_LABELS.pendente}</option>
+            <option value="em_andamento">{STATUS_LABELS.em_andamento}</option>
+            <option value="concluida">{STATUS_LABELS.concluida}</option>
+          </select>
+          <select
+            className="input-neon w-full"
+            value={relationshipFilter}
+            onChange={(event) => setRelationshipFilter(event.target.value)}
+          >
+            <option value="all">Todas as tarefas</option>
+            <option value="owner">Sou responsável</option>
+            <option value="assignee">Estou na tarefa</option>
+          </select>
+          <select
+            className="input-neon w-full"
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+          >
+            <option value="all">Todas as datas</option>
+            <option value="today">Hoje</option>
+            <option value="week">Esta semana</option>
+            <option value="overdue">Atrasadas</option>
+            <option value="nodate">Sem data</option>
+          </select>
+        </div>
+        <div className="flex items-center justify-end">
+          <button
+            onClick={clearFilters}
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition"
+          >
+            Limpar filtros
+          </button>
+        </div>
+      </section>
 
       {loading ? (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-lg p-8 text-center text-[var(--text-muted)]">
@@ -578,7 +789,7 @@ export default function WeeklyTasks() {
                                 {task.prioridade || "Média"}
                               </span>
                               <span className="px-2 py-0.5 rounded-full border border-[var(--line)] text-[var(--text-muted)]">
-                                {task.data || "Sem data"}
+                                {formatTaskDate(task.data) || "Sem data"}
                               </span>
                             </div>
                             {concluidoEm && (
@@ -798,6 +1009,41 @@ export default function WeeklyTasks() {
                   {commentSaving ? "Enviando..." : "Enviar comentário"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmAction && (
+        <div className="fixed inset-0 z-[160] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-xl">
+            <div className="px-5 py-4 border-b border-[var(--line)]">
+              <h3 className="text-lg font-semibold text-[var(--text)]">
+                {confirmAction.type === "delete"
+                  ? "Confirmar exclusão"
+                  : "Confirmar movimentação"}
+              </h3>
+              <p className="text-sm text-[var(--text-muted)] mt-1">
+                {confirmAction.type === "delete"
+                  ? "Deseja remover esta atividade? Essa ação não pode ser desfeita."
+                  : `Deseja mover esta atividade para "${
+                      STATUS_LABELS[confirmAction.nextStatus] || "Outro status"
+                    }"?`}
+              </p>
+            </div>
+            <div className="px-5 py-4 flex items-center justify-end gap-2">
+              <button
+                onClick={closeConfirmAction}
+                className="px-4 py-2 rounded-lg border border-[var(--line)] text-[var(--text)] hover:bg-white/5 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmAction}
+                className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white hover:brightness-110 transition"
+              >
+                Confirmar
+              </button>
             </div>
           </div>
         </div>

@@ -72,6 +72,23 @@ const formatDateTime = (value) => {
 
 const escapeCsv = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
 
+const toMillis = (value) => {
+  const raw =
+    typeof value?.toMillis === "function"
+      ? value.toMillis()
+      : typeof value?.toDate === "function"
+      ? value.toDate().getTime()
+      : value instanceof Date
+      ? value.getTime()
+      : value
+      ? new Date(value).getTime()
+      : 0;
+  return Number.isFinite(raw) ? raw : 0;
+};
+
+const sortByCreatedDesc = (items) =>
+  items.sort((a, b) => toMillis(b.criadoEm) - toMillis(a.criadoEm));
+
 export default function MovementListPage({ office: officeProp }) {
   const office = useResolvedOffice(officeProp);
   const { usuario, canEditModule } = useAuth();
@@ -105,42 +122,56 @@ export default function MovementListPage({ office: officeProp }) {
       return;
     }
 
-    const baseRef = collection(db, "equipment-movements");
-    const movementQuery = query(baseRef, where("local", "==", office));
-
     setLoading(true);
-    const unsub = onSnapshot(
-      movementQuery,
+
+    const baseRef = collection(db, "equipment-movements");
+    const snapshotsByQuery = {
+      local: [],
+      origem: [],
+    };
+    const syncMovements = () => {
+      const merged = new Map();
+      [...snapshotsByQuery.local, ...snapshotsByQuery.origem].forEach((item) => {
+        if (item.officeScope && item.officeScope !== office) return;
+        merged.set(item.id, item);
+      });
+      setMovements(sortByCreatedDesc(Array.from(merged.values())));
+      setLoading(false);
+    };
+    const handleError = (err) => {
+      console.error("Erro ao carregar movimentações:", err);
+      setMovements([]);
+      setLoading(false);
+    };
+
+    const unsubLocal = onSnapshot(
+      query(baseRef, where("local", "==", office)),
       (snap) => {
-        const docs = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => {
-            const toMillis = (value) => {
-              const raw =
-                typeof value?.toMillis === "function"
-                  ? value.toMillis()
-                  : typeof value?.toDate === "function"
-                  ? value.toDate().getTime()
-                  : value instanceof Date
-                  ? value.getTime()
-                  : value
-                  ? new Date(value).getTime()
-                  : 0;
-              return Number.isFinite(raw) ? raw : 0;
-            };
-            return toMillis(b.criadoEm) - toMillis(a.criadoEm);
-          });
-        setMovements(docs);
-        setLoading(false);
+        snapshotsByQuery.local = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        syncMovements();
       },
-      (err) => {
-        console.error("Erro ao carregar movimentações:", err);
-        setMovements([]);
-        setLoading(false);
-      }
+      handleError
     );
 
-    return () => unsub();
+    const unsubOrigem = onSnapshot(
+      query(baseRef, where("origem", "==", office)),
+      (snap) => {
+        snapshotsByQuery.origem = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        syncMovements();
+      },
+      handleError
+    );
+
+    return () => {
+      unsubLocal();
+      unsubOrigem();
+    };
   }, [office]);
 
   const filteredMovements = useMemo(() => {
@@ -153,11 +184,14 @@ export default function MovementListPage({ office: officeProp }) {
         mov.numeroSerie,
         mov.modelo,
         mov.tipo,
+        mov.origem,
+        mov.local,
         mov.responsavel,
         mov.email,
         mov.status,
         mov.disponibilidade,
         mov.obs,
+        mov.informacoesAdicionais,
       ]
         .map((v) => String(v ?? "").toLowerCase())
         .join(" ");
@@ -176,10 +210,12 @@ export default function MovementListPage({ office: officeProp }) {
       "Numero de Serie",
       "Responsavel",
       "Email",
+      "Origem",
+      "Destino",
       "Status do Termo",
       "Disponibilidade",
       "Observacoes",
-      "Local",
+      "Informacoes adicionais",
       "Criado em",
     ].join(",");
 
@@ -191,10 +227,12 @@ export default function MovementListPage({ office: officeProp }) {
         mov.numeroSerie || "",
         mov.responsavel || "",
         mov.email || "",
+        mov.origem || "",
+        mov.local || "",
         mov.status || "",
         mov.disponibilidade || "",
         mov.obs || "",
-        mov.local || "",
+        mov.informacoesAdicionais || "",
         formatDateTime(mov.criadoEm),
       ]
         .map(escapeCsv)
@@ -388,9 +426,26 @@ export default function MovementListPage({ office: officeProp }) {
                     {mov.responsavel || "—"}
                   </span>
                 </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Origem</span>
+                  <span className="text-right max-w-[55%] truncate">
+                    {mov.origem || office || "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[var(--text-muted)]">Destino</span>
+                  <span className="text-right max-w-[55%] truncate">
+                    {mov.local || "—"}
+                  </span>
+                </div>
                 {mov.obs ? (
                   <p className="text-[var(--text-muted)] text-xs leading-snug line-clamp-2">
                     {mov.obs}
+                  </p>
+                ) : null}
+                {mov.informacoesAdicionais ? (
+                  <p className="text-[var(--text-muted)] text-xs leading-snug line-clamp-2">
+                    Info adicionais: {mov.informacoesAdicionais}
                   </p>
                 ) : null}
               </div>
@@ -426,6 +481,8 @@ export default function MovementListPage({ office: officeProp }) {
               <th className="p-3">Nº de Série</th>
               <th className="p-3">Responsável</th>
               <th className="p-3">E-mail</th>
+              <th className="p-3">Origem</th>
+              <th className="p-3">Destino</th>
               <th className="p-3">Status do Termo</th>
               <th className="p-3">Disponibilidade</th>
               <th className="p-3">Observações</th>
@@ -437,7 +494,7 @@ export default function MovementListPage({ office: officeProp }) {
             {loading ? (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={13}
                   className="p-6 text-center text-[var(--text-muted)]"
                 >
                   Carregando movimentações…
@@ -446,7 +503,7 @@ export default function MovementListPage({ office: officeProp }) {
             ) : filteredMovements.length === 0 ? (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={13}
                   className="p-6 text-center text-[var(--text-muted)]"
                 >
                   Nenhuma movimentação encontrada.
@@ -478,6 +535,8 @@ export default function MovementListPage({ office: officeProp }) {
                   <td className="p-3">{mov.numeroSerie || "—"}</td>
                   <td className="p-3">{mov.responsavel || "—"}</td>
                   <td className="p-3">{mov.email || "—"}</td>
+                  <td className="p-3">{mov.origem || office || "—"}</td>
+                  <td className="p-3">{mov.local || "—"}</td>
                   <td className="p-3">
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-semibold ${
@@ -500,7 +559,14 @@ export default function MovementListPage({ office: officeProp }) {
                       {mov.disponibilidade || "—"}
                     </span>
                   </td>
-                  <td className="p-3">{mov.obs || "—"}</td>
+                  <td className="p-3">
+                    <div>{mov.obs || "—"}</div>
+                    {mov.informacoesAdicionais && (
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Info adicionais: {mov.informacoesAdicionais}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3">{formatDateTime(mov.criadoEm)}</td>
                   <td
                     className="p-3 text-center"
