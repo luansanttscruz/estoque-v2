@@ -9,6 +9,7 @@ const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const {
   gerarXmlCotacao,
+  normalizeDhlEndpoint,
   normalizeCep,
   parseDhlQuoteResponse,
 } = require("../api/cotacao-dhl/dhlProxy");
@@ -188,7 +189,7 @@ app.post("/api/cotacao-dhl", async (req, res) => {
     });
 
     // Enviar para DHL
-    const response = await fetch(process.env.DHL_ENDPOINT, {
+    const response = await fetch(normalizeDhlEndpoint(process.env.DHL_ENDPOINT), {
       method: "POST",
       headers: { "Content-Type": "application/xml" },
       body: xmlCotacao,

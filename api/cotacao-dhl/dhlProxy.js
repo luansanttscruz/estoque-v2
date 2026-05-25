@@ -12,9 +12,22 @@ const normalizeCep = (value) => String(value || "").replace(/\D/g, "");
 const DHL_UNAVAILABLE_MESSAGE =
   "Indisponível para essa região. Consulte através do site da DHL.";
 
+const normalizeDhlEndpoint = (value) => {
+  const endpoint = String(value || "").trim().replace(/\/+$/, "");
+  if (!endpoint) return "";
+  return endpoint.endsWith("/DCTRequest")
+    ? endpoint
+    : `${endpoint}/DCTRequest`;
+};
+
 const normalizeNumber = (value, fallback) => {
   const number = Number(String(value ?? "").replace(",", "."));
   return Number.isFinite(number) && number > 0 ? number : fallback;
+};
+
+const buildMessageReference = () => {
+  const randomPart = Math.random().toString(36).slice(2, 12);
+  return `${Date.now()}${randomPart}`.padEnd(28, "0").slice(0, 32);
 };
 
 function gerarXmlCotacao({
@@ -37,48 +50,61 @@ function gerarXmlCotacao({
   const packageHeight = normalizeNumber(altura, 10);
   const packageWidth = normalizeNumber(largura, 33);
   const packageDepth = normalizeNumber(comprimento, 34);
+  const accountNumber = String(process.env.DHL_ACCOUNT_NUMBER || "").trim();
 
   return `
-    <req:QuoteRequest xmlns:req="http://www.dhl.com">
-      <Request>
-        <ServiceHeader>
-          <SiteID>${escapeXml(process.env.DHL_SITE_ID)}</SiteID>
-          <Password>${escapeXml(process.env.DHL_PASSWORD)}</Password>
-        </ServiceHeader>
-      </Request>
-      <From>
-        <CountryCode>BR</CountryCode>
-        <Postalcode>${escapeXml(origemCep)}</Postalcode>
-        <City>${escapeXml(origemCidade)}</City>
-      </From>
-      <To>
-        <CountryCode>BR</CountryCode>
-        <Postalcode>${escapeXml(destinoCep)}</Postalcode>
-        <City>${escapeXml(cidade)}</City>
-      </To>
-      <BkgDetails>
-        <PaymentCountryCode>BR</PaymentCountryCode>
-        <Date>${escapeXml(dataHoje)}</Date>
-        <ReadyTime>PT10H21M</ReadyTime>
-        <DimensionUnit>CM</DimensionUnit>
-        <WeightUnit>KG</WeightUnit>
-        <Pieces>
-          <Piece>
-            <PieceID>1</PieceID>
-            <Height>${packageHeight}</Height>
-            <Depth>${packageDepth}</Depth>
-            <Width>${packageWidth}</Width>
-            <Weight>${packageWeight}</Weight>
-          </Piece>
-        </Pieces>
-        <IsDutiable>N</IsDutiable>
-        <NetworkTypeCode>AL</NetworkTypeCode>
-      </BkgDetails>
-      <Dutiable>
-        <DeclaredValue>${declaredValue}</DeclaredValue>
-        <DeclaredCurrency>BRL</DeclaredCurrency>
-      </Dutiable>
-    </req:QuoteRequest>
+<?xml version="1.0" encoding="utf-8"?>
+<p:DCTRequest xmlns:p="http://www.dhl.com" xmlns:p1="http://www.dhl.com/datatypes" xmlns:p2="http://www.dhl.com/DCTRequestdatatypes" schemaVersion="3.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.dhl.com DCT-req.xsd">
+  <GetQuote>
+    <Request>
+      <ServiceHeader>
+        <MessageTime>${new Date().toISOString()}</MessageTime>
+        <MessageReference>${buildMessageReference()}</MessageReference>
+        <SiteID>${escapeXml(process.env.DHL_SITE_ID)}</SiteID>
+        <Password>${escapeXml(process.env.DHL_PASSWORD)}</Password>
+      </ServiceHeader>
+      <MetaData>
+        <SoftwareName>estoque-v2</SoftwareName>
+        <SoftwareVersion>1.0</SoftwareVersion>
+      </MetaData>
+    </Request>
+    <From>
+      <CountryCode>BR</CountryCode>
+      <Postalcode>${escapeXml(origemCep)}</Postalcode>
+      <City>${escapeXml(origemCidade)}</City>
+    </From>
+    <BkgDetails>
+      <PaymentCountryCode>BR</PaymentCountryCode>
+      <Date>${escapeXml(dataHoje)}</Date>
+      <ReadyTime>PT10H21M</ReadyTime>
+      <DimensionUnit>CM</DimensionUnit>
+      <WeightUnit>KG</WeightUnit>
+      <NumberOfPieces>1</NumberOfPieces>
+      <ShipmentWeight>${packageWeight}</ShipmentWeight>
+      <Pieces>
+        <Piece>
+          <PieceID>1</PieceID>
+          <Height>${packageHeight}</Height>
+          <Depth>${packageDepth}</Depth>
+          <Width>${packageWidth}</Width>
+          <Weight>${packageWeight}</Weight>
+        </Piece>
+      </Pieces>
+      ${accountNumber ? `<PaymentAccountNumber>${escapeXml(accountNumber)}</PaymentAccountNumber>` : ""}
+      <IsDutiable>N</IsDutiable>
+      <NetworkTypeCode>AL</NetworkTypeCode>
+    </BkgDetails>
+    <To>
+      <CountryCode>BR</CountryCode>
+      <Postalcode>${escapeXml(destinoCep)}</Postalcode>
+      <City>${escapeXml(cidade)}</City>
+    </To>
+    <Dutiable>
+      <DeclaredCurrency>BRL</DeclaredCurrency>
+      <DeclaredValue>${declaredValue}</DeclaredValue>
+    </Dutiable>
+  </GetQuote>
+</p:DCTRequest>
   `.trim();
 }
 
@@ -111,6 +137,7 @@ function parseDhlQuoteResponse(xml) {
   ]);
 
   const entrega = findFirstXmlValue(text, [
+    "DlvyDateTime",
     "EstimatedDeliveryDate",
     "DeliveryDate",
     "DlvyDate",
@@ -128,4 +155,9 @@ function parseDhlQuoteResponse(xml) {
   };
 }
 
-module.exports = { gerarXmlCotacao, normalizeCep, parseDhlQuoteResponse };
+module.exports = {
+  gerarXmlCotacao,
+  normalizeCep,
+  normalizeDhlEndpoint,
+  parseDhlQuoteResponse,
+};

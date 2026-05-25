@@ -1,5 +1,6 @@
 const {
   gerarXmlCotacao,
+  normalizeDhlEndpoint,
   normalizeCep,
   parseDhlQuoteResponse,
 } = require("./cotacao-dhl/dhlProxy");
@@ -91,7 +92,7 @@ module.exports = async (req, res) => {
       comprimento: body.comprimento,
     });
 
-    const response = await fetch(process.env.DHL_ENDPOINT, {
+    const response = await fetch(normalizeDhlEndpoint(process.env.DHL_ENDPOINT), {
       method: "POST",
       headers: { "Content-Type": "application/xml" },
       body: xmlCotacao,
