@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import showToast from "../utils/showToast";
 import { useAuth } from "../context/AuthContext";
+import { createAuditLog, diffFields } from "../utils/auditLog";
 
 const OFFICES = [
   { id: "sao-paulo", name: "São Paulo" },
@@ -144,7 +145,7 @@ const createEmptyStats = (categories) =>
   }, {});
 
 export default function PeripheralsPage() {
-  const { canEditModule } = useAuth();
+  const { usuario, canEditModule } = useAuth();
   const canEditPeripherals = canEditModule("peripherals");
   const [categories, setCategories] = useState(() => DEFAULT_CATEGORIES);
   const [stats, setStats] = useState(() => createEmptyStats(DEFAULT_CATEGORIES));
@@ -309,7 +310,7 @@ export default function PeripheralsPage() {
     }
 
     try {
-      await addDoc(collection(db, "peripherals"), {
+      const payload = {
         office: selectedOffice.name,
         officeId: selectedOffice.id,
         category: form.category,
@@ -317,6 +318,23 @@ export default function PeripheralsPage() {
         ...(email ? { email } : {}),
         quantity,
         createdAt: serverTimestamp(),
+      };
+      const createdRef = await addDoc(collection(db, "peripherals"), payload);
+      await createAuditLog({
+        module: "peripherals",
+        entityType: "peripheral",
+        entityId: createdRef.id,
+        action: "create",
+        after: {
+          ...payload,
+          createdAt: null,
+        },
+        changedFields: ["office", "category", "model", "email", "quantity"],
+        actor: usuario,
+        metadata: {
+          office: selectedOffice.name,
+          category: form.category,
+        },
       });
       showToast({
         type: "success",
@@ -410,11 +428,39 @@ export default function PeripheralsPage() {
     }
 
     try {
+      const before = {
+        office: editModal.entry.office || "",
+        officeId: editModal.entry.officeId || "",
+        category: editModal.entry.category || "",
+        model: editModal.entry.model || "",
+        email: editModal.entry.email || "",
+        quantity: Number(editModal.entry.quantity) || 0,
+      };
+      const after = {
+        ...before,
+        model,
+        ...(email ? { email } : { email: "" }),
+        quantity,
+      };
       await updateDoc(doc(db, "peripherals", editModal.entry.id), {
         model,
         ...(email ? { email } : { email: "" }),
         quantity,
         updatedAt: serverTimestamp(),
+      });
+      await createAuditLog({
+        module: "peripherals",
+        entityType: "peripheral",
+        entityId: editModal.entry.id,
+        action: "update",
+        before,
+        after,
+        changedFields: diffFields(before, after),
+        actor: usuario,
+        metadata: {
+          office: editModal.entry.office || editModal.entry.officeId || "",
+          category: editModal.entry.category || "",
+        },
       });
       showToast({
         type: "success",
@@ -450,6 +496,26 @@ export default function PeripheralsPage() {
 
     try {
       await deleteDoc(doc(db, "peripherals", entry.id));
+      await createAuditLog({
+        module: "peripherals",
+        entityType: "peripheral",
+        entityId: entry.id,
+        action: "delete",
+        before: {
+          office: entry.office || "",
+          officeId: entry.officeId || "",
+          category: entry.category || "",
+          model: entry.model || "",
+          email: entry.email || "",
+          quantity: Number(entry.quantity) || 0,
+        },
+        changedFields: ["deleted"],
+        actor: usuario,
+        metadata: {
+          office: entry.office || entry.officeId || "",
+          category: entry.category || "",
+        },
+      });
       showToast({
         type: "success",
         message: "Registro removido.",
