@@ -23,6 +23,8 @@ const CONTEXT_OPTIONS = [
   "Equipamento novo no office",
   "Troca",
 ];
+const normalizeSerial = (value) =>
+  (value || "").toString().trim().toUpperCase();
 
 function StatusBadge({ value }) {
   const ok =
@@ -60,7 +62,7 @@ export default function NotebookEditModal({
     email: notebook?.email || "",
     observacao: notebook?.observacao || notebook?.obs || "",
     contextoMovimento: notebook?.contextoMovimento || "",
-    serial: notebook?.serial || "",
+    serial: normalizeSerial(notebook?.serial),
   }));
   const [saving, setSaving] = useState(false);
 
@@ -129,7 +131,7 @@ export default function NotebookEditModal({
       email: notebook?.email || "",
       observacao: notebook?.observacao || notebook?.obs || "",
       contextoMovimento: notebook?.contextoMovimento || "",
-      serial: notebook?.serial || "",
+      serial: normalizeSerial(notebook?.serial),
     });
   }, [open, notebook, statuses]);
 
@@ -148,7 +150,7 @@ export default function NotebookEditModal({
       observacao: form.observacao.trim(),
       obs: form.observacao.trim(),
       contextoMovimento: form.contextoMovimento || "",
-      serial: form.serial.trim(),
+      serial: normalizeSerial(form.serial),
       updatedAt: serverTimestamp(),
     };
 
@@ -249,7 +251,9 @@ export default function NotebookEditModal({
               Serial
               <input
                 value={form.serial}
-                onChange={(e) => handleChange("serial", e.target.value)}
+                onChange={(e) =>
+                  handleChange("serial", normalizeSerial(e.target.value))
+                }
                 className="input-neon"
                 placeholder="Número de série"
               />

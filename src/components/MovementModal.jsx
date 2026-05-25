@@ -199,7 +199,7 @@ export default function MovementModal({
   const [data, setData] = useState("");
   const [tipo, setTipo] = useState("Saida");
   const [modelo, setModelo] = useState("");
-  const [numero, setNumero] = useState(numeroSerie || "");
+  const [numero, setNumero] = useState(normalizeSerial(numeroSerie));
   const [responsavel, setResponsavel] = useState(usuario?.email || "");
   const [local, setLocal] = useState(office);
   const [obs, setObs] = useState("");
@@ -1095,7 +1095,7 @@ export default function MovementModal({
                   <input
                     className="input-neon w-full"
                     value={numero}
-                    onChange={(e) => setNumero(e.target.value)}
+                    onChange={(e) => setNumero(normalizeSerial(e.target.value))}
                     required
                   />
                 </div>

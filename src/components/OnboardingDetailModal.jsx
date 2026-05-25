@@ -10,6 +10,9 @@ import { db } from "../firebase";
 import { Trash2, Pencil } from "lucide-react";
 import DhlQuickQuoteModal from "./DhlQuickQuoteModal";
 
+const normalizeSerial = (value) =>
+  (value || "").toString().trim().toUpperCase();
+
 export default function OnboardingDetailModal({
   onboarding,
   onClose,
@@ -30,7 +33,11 @@ export default function OnboardingDetailModal({
   }, [onboarding, modoEdicaoInicial, canEdit]);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({
+      ...form,
+      [name]: name === "serial" ? normalizeSerial(value) : value,
+    });
   };
 
   const salvar = async () => {
@@ -39,17 +46,21 @@ export default function OnboardingDetailModal({
       alert("Os campos 'Nome' e 'Data' são obrigatórios.");
       return;
     }
+    const payload = {
+      ...form,
+      serial: normalizeSerial(form.serial),
+    };
     try {
       if (criandoNovo) {
         const docRef = await addDoc(collection(db, "onboardings"), {
-          ...form,
+          ...payload,
           createdAt: new Date(),
         });
-        onAtualizar({ ...form, id: docRef.id });
+        onAtualizar({ ...payload, id: docRef.id });
       } else {
         const ref = doc(db, "onboardings", form.id);
-        await updateDoc(ref, form);
-        onAtualizar(form);
+        await updateDoc(ref, payload);
+        onAtualizar(payload);
       }
       setEditando(false);
       onClose();

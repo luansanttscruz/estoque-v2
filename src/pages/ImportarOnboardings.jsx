@@ -6,6 +6,9 @@ import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import showToast from "../utils/showToast";
 
+const normalizeSerial = (value) =>
+  (value || "").toString().trim().toUpperCase();
+
 export default function ImportarOnboardings() {
   const { canEditModule } = useAuth();
   const canEditOnboarding = canEditModule("onboarding");
@@ -88,7 +91,7 @@ export default function ImportarOnboardings() {
           cep: viaCepData?.cep || cepExtraido,
           equipamento: row["EQUIPAMENTO"] || "",
           status: row["ENTREGA"] || "",
-          serial: row["Serial "] || "",
+          serial: normalizeSerial(row["Serial "]),
           createdAt: new Date(),
         });
       }

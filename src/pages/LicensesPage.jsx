@@ -13,6 +13,8 @@ import { db } from "../firebase";
 import showToast from "../utils/showToast";
 
 const COLLECTION_NAME = "licenses-machines";
+const normalizeSerial = (value) =>
+  (value || "").toString().trim().toUpperCase();
 
 export default function LicensesPage() {
   const [form, setForm] = useState({ machine: "", serial: "", recoveryKey: "" });
@@ -62,7 +64,7 @@ export default function LicensesPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     const machine = form.machine.trim();
-    const serial = form.serial.trim();
+    const serial = normalizeSerial(form.serial);
     const recoveryKey = form.recoveryKey.trim();
 
     if (!machine || !serial || !recoveryKey) {
@@ -183,7 +185,7 @@ export default function LicensesPage() {
               onChange={(event) =>
                 setForm((prev) => ({
                   ...prev,
-                  serial: event.target.value,
+                  serial: normalizeSerial(event.target.value),
                 }))
               }
               placeholder="Ex.: C02YD0ABC123"
