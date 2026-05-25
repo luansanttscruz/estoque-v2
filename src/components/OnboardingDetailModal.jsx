@@ -7,7 +7,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { Trash2, Pencil, Send } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 import DhlQuickQuoteModal from "./DhlQuickQuoteModal";
 
 export default function OnboardingDetailModal({
@@ -21,8 +21,6 @@ export default function OnboardingDetailModal({
   const [form, setForm] = useState({ ...onboarding });
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
   const [mostrarCotacaoDHL, setMostrarCotacaoDHL] = useState(false);
-  const [xmlDHL, setXmlDHL] = useState("");
-  const [mostrarModalDHL, setMostrarModalDHL] = useState(false);
 
   const criandoNovo = !form.id;
 
@@ -77,51 +75,6 @@ export default function OnboardingDetailModal({
       alert("Erro ao excluir o onboarding.");
     }
   };
-
-  function gerarXMLParaDHL(dados) {
-    const hoje = new Date().toISOString().split("T")[0];
-
-    return `
-    <req:ShipmentRequest xmlns:req="http://www.dhl.com">
-      <Request>
-        <ServiceHeader>
-          <SiteID>vtexBR</SiteID>
-          <Password>A@6vN#6yE#9tX^0p</Password>
-        </ServiceHeader>
-      </Request>
-      <ShipmentDetails>
-        <AccountNumber>654343674</AccountNumber>
-        <ShipDate>${hoje}</ShipDate>
-        <CurrencyCode>BRL</CurrencyCode>
-        <Weight>2.0</Weight>
-        <ProductCode>P</ProductCode>
-        <PackagesCount>1</PackagesCount>
-      </ShipmentDetails>
-      <Shipper>
-        <CompanyName>Silimed LTDA</CompanyName>
-        <AddressLine>${dados.rua}, ${dados.numero}${
-      dados.complemento ? ` - ${dados.complemento}` : ""
-    }</AddressLine>
-        <City>${dados.cidade}</City>
-        <PostalCode>${dados.cep.replace("-", "")}</PostalCode>
-        <StateProvinceCode>${dados.estado}</StateProvinceCode>
-        <CountryCode>BR</CountryCode>
-        <PhoneNumber>21999999999</PhoneNumber>
-      </Shipper>
-      <Recipient>
-        <CompanyName>${dados.nome}</CompanyName>
-        <AddressLine>${dados.rua}, ${dados.numero}${
-      dados.complemento ? ` - ${dados.complemento}` : ""
-    }</AddressLine>
-        <City>${dados.cidade}</City>
-        <PostalCode>${dados.cep.replace("-", "")}</PostalCode>
-        <StateProvinceCode>${dados.estado}</StateProvinceCode>
-        <CountryCode>BR</CountryCode>
-        <PhoneNumber>${dados.telefone}</PhoneNumber>
-      </Recipient>
-    </req:ShipmentRequest>
-    `.trim();
-  }
 
   const campos = [
     ["Nome", "nome"],

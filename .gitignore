@@ -9,3 +9,4 @@ eval "$(ssh-agent -s)"*
 *.key
 *.p12
 *.ppk
+.vercel

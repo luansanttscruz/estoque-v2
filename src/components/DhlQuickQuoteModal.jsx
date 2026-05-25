@@ -61,10 +61,9 @@ const ORIGIN_BY_OFFICE = {
 };
 
 const API_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost"
-    ? "http://localhost:3001"
-    : "");
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? process.env.REACT_APP_API_BASE_URL || "http://localhost:3001"
+    : "";
 
 const onlyDigits = (value) => String(value || "").replace(/\D/g, "");
 
@@ -220,14 +219,6 @@ export default function DhlQuickQuoteModal({
       cepDigits.length !== 8
     ) {
       alert("Preencha todos os campos obrigatórios.");
-      return;
-    }
-
-    if (!API_BASE) {
-      const message =
-        "API de cotação não configurada. Defina REACT_APP_API_BASE_URL para o backend.";
-      setErroCotacao(message);
-      alert(message);
       return;
     }
 
