@@ -5,6 +5,8 @@ import { Download, Monitor, Mail, NotebookPen, Loader2, AlertTriangle } from "lu
 import NotebookDetailModal from "./NotebookDetailModal";
 import showToast from "../utils/showToast";
 import { parseAvailability } from "../utils/availability";
+import { useAuth } from "../context/AuthContext";
+import { createAuditLog } from "../utils/auditLog";
 
 /** Badge de disponibilidade */
 function AvailabilityBadge({ status }) {
@@ -39,6 +41,7 @@ function AvailabilityBadge({ status }) {
 }
 
 export default function StockTable({ office, collectionName }) {
+  const { usuario } = useAuth();
   const [rows, setRows] = useState([]);
   const [queryText, setQueryText] = useState("");
   const [activeRowId, setActiveRowId] = useState(null);
@@ -126,6 +129,28 @@ export default function StockTable({ office, collectionName }) {
     setDeletingId(pendingDelete.id);
     try {
       await deleteDoc(doc(db, collectionName, pendingDelete.id));
+      await createAuditLog({
+        module: "inventory",
+        entityType: "equipment",
+        entityId: pendingDelete.serial || pendingDelete.id,
+        action: "delete",
+        before: {
+          serial: pendingDelete.serial || "",
+          modelo: pendingDelete.modelo || "",
+          status: pendingDelete.status || "",
+          email: pendingDelete.email || "",
+          observacao: pendingDelete.observacao || pendingDelete.obs || "",
+          office,
+          collectionName,
+        },
+        changedFields: ["deleted"],
+        actor: usuario,
+        metadata: {
+          office,
+          collectionName,
+          stockDocId: pendingDelete.id,
+        },
+      });
       showToast({
         type: "success",
         message: "Equipamento removido do estoque.",

@@ -19,6 +19,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import { useSidebar } from "../context/SidebarContext";
 import showToast from "../utils/showToast";
+import { createAuditLog } from "../utils/auditLog";
 import {
   getTime,
   normalizeSerial,
@@ -560,6 +561,29 @@ export default function InventoryPage({
                   setDeletingId(confirmDelete.id);
                   try {
                     await deleteDoc(doc(db, collectionName, confirmDelete.id));
+                    await createAuditLog({
+                      module: "inventory",
+                      entityType: "equipment",
+                      entityId: confirmDelete.serial || confirmDelete.id,
+                      action: "delete",
+                      before: {
+                        serial: confirmDelete.serial || "",
+                        modelo: confirmDelete.modelo || "",
+                        status: confirmDelete.status || "",
+                        email: confirmDelete.email || "",
+                        observacao:
+                          confirmDelete.observacao || confirmDelete.obs || "",
+                        office,
+                        collectionName,
+                      },
+                      changedFields: ["deleted"],
+                      actor: usuario,
+                      metadata: {
+                        office,
+                        collectionName,
+                        stockDocId: confirmDelete.id,
+                      },
+                    });
                     showToast({
                       type: "success",
                       message: "Notebook removido do estoque.",
