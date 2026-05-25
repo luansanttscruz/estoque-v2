@@ -535,7 +535,7 @@ export default function DhlQuickQuoteModal({
         </button>
       </div>
 
-      {valorFrete && dataEntrega && (
+      {dataEntrega && (
         <div className="mt-6 p-4 border rounded-lg bg-gray-50 text-sm text-center">
           <h3 className="text-xl font-semibold text-pink-700 mb-2">
             Entrega Estimada
@@ -543,11 +543,8 @@ export default function DhlQuickQuoteModal({
           <p className="text-lg font-bold">
             {new Date(dataEntrega).toLocaleDateString()}
           </p>
-          <p className="text-sm text-gray-700 mt-2">
-            Valor do Frete: R$ {valorFrete}
-          </p>
           <p className="text-xs text-gray-500 mt-2">
-            Os valores podem sofrer alterações.
+            O prazo pode sofrer alterações.
           </p>
         </div>
       )}
