@@ -86,8 +86,43 @@ const toMillis = (value) => {
   return Number.isFinite(raw) ? raw : 0;
 };
 
-const sortByCreatedDesc = (items) =>
-  items.sort((a, b) => toMillis(b.criadoEm) - toMillis(a.criadoEm));
+const getMovementActivityTime = (item) => {
+  const historico = Array.isArray(item?.historico) ? item.historico : [];
+  const historyTime = historico.reduce((latest, entry) => {
+    const entryTime = toMillis(entry?.registradoEm || entry?.criadoEm);
+    return Math.max(latest, entryTime);
+  }, 0);
+
+  return Math.max(
+    toMillis(item?.atualizadoEm),
+    historyTime,
+    toMillis(item?.criadoEm),
+  );
+};
+
+const sortByActivityDesc = (items) =>
+  items.sort((a, b) => getMovementActivityTime(b) - getMovementActivityTime(a));
+
+const consolidateLatestBySerial = (items) => {
+  const latestBySerial = new Map();
+
+  items.forEach((item) => {
+    const key = String(item?.numeroSerie || item?.id || "")
+      .trim()
+      .toUpperCase();
+    if (!key) return;
+
+    const current = latestBySerial.get(key);
+    if (
+      !current ||
+      getMovementActivityTime(item) > getMovementActivityTime(current)
+    ) {
+      latestBySerial.set(key, item);
+    }
+  });
+
+  return Array.from(latestBySerial.values());
+};
 
 export default function MovementListPage({ office: officeProp }) {
   const office = useResolvedOffice(officeProp);
@@ -135,7 +170,9 @@ export default function MovementListPage({ office: officeProp }) {
         if (item.officeScope && item.officeScope !== office) return;
         merged.set(item.id, item);
       });
-      setMovements(sortByCreatedDesc(Array.from(merged.values())));
+      setMovements(
+        sortByActivityDesc(consolidateLatestBySerial(Array.from(merged.values()))),
+      );
       setLoading(false);
     };
     const handleError = (err) => {

@@ -163,6 +163,26 @@ const findStockEntriesBySerial = async (
   return Array.from(entriesByPath.values());
 };
 
+const findMovementEntriesBySerial = async (serial) => {
+  const normalizedSerial = normalizeSerial(serial);
+  if (!normalizedSerial) return [];
+
+  const snap = await getDocs(
+    query(
+      collection(db, "equipment-movements"),
+      where("numeroSerie", "==", normalizedSerial),
+    ),
+  );
+
+  return snap.docs
+    .map((docSnap) => ({
+      ref: docSnap.ref,
+      id: docSnap.id,
+      data: docSnap.data(),
+    }))
+    .sort((a, b) => getTime(b.data?.criadoEm) - getTime(a.data?.criadoEm));
+};
+
 const deleteStockEntriesBySerial = async (serial) => {
   const entries = await findStockEntriesBySerial(serial);
   await Promise.all(entries.map((entry) => deleteDoc(entry.ref)));
@@ -739,7 +759,23 @@ export default function MovementModal({
         }
 
         const now = Timestamp.now();
-        const transferenciaId = `${Date.now()}-${normalizedNumero}`;
+        const movementEntries = await findMovementEntriesBySerial(normalizedNumero);
+        const currentMovementEntry = editMovement?.id
+          ? {
+              ref: doc(db, "equipment-movements", editMovement.id),
+              id: editMovement.id,
+              data: editMovement,
+            }
+          : movementEntries[0] || null;
+        const historicoAnterior = Array.isArray(
+          currentMovementEntry?.data?.historico,
+        )
+          ? currentMovementEntry.data.historico
+          : [];
+        const createdAtValue = currentMovementEntry?.data?.criadoEm || now;
+        const transferenciaId =
+          currentMovementEntry?.data?.transferenciaId ||
+          `${Date.now()}-${normalizedNumero}`;
         const commonTransferPayload = {
           data,
           modelo: normalizedModelo,
@@ -751,7 +787,8 @@ export default function MovementModal({
           observacao: sanitizedObs,
           informacoesAdicionais: sanitizedAdditionalInfo,
           ...(contextoMovimento ? { contextoMovimento } : {}),
-          criadoEm: now,
+          criadoEm: createdAtValue,
+          atualizadoEm: now,
           ...(email ? { email } : {}),
           status: computedStatus,
           transferenciaId,
@@ -774,6 +811,14 @@ export default function MovementModal({
           usuario: usuario?.email || responsavel,
           acao: role === "saida" ? "Transferência - Saída" : "Transferência - Entrada",
         });
+        const currentMovementPayload = {
+          ...entradaPayload,
+          historico: [
+            ...historicoAnterior,
+            buildTransferHistory(saidaPayload, "saida"),
+            buildTransferHistory(entradaPayload, "entrada"),
+          ],
+        };
 
         const destinationStockRef = doc(
           db,
@@ -781,14 +826,14 @@ export default function MovementModal({
           normalizedNumero,
         );
         const transferBatch = writeBatch(db);
-        transferBatch.set(doc(collection(db, "equipment-movements")), {
-          ...saidaPayload,
-          historico: [buildTransferHistory(saidaPayload, "saida")],
-        });
-        transferBatch.set(doc(collection(db, "equipment-movements")), {
-          ...entradaPayload,
-          historico: [buildTransferHistory(entradaPayload, "entrada")],
-        });
+        if (currentMovementEntry) {
+          transferBatch.update(currentMovementEntry.ref, currentMovementPayload);
+        } else {
+          transferBatch.set(
+            doc(collection(db, "equipment-movements")),
+            currentMovementPayload,
+          );
+        }
         originStockEntries.forEach((entry) => {
           transferBatch.delete(entry.ref);
         });
