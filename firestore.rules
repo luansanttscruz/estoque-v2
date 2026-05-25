@@ -89,6 +89,7 @@ service cloud.firestore {
       allow update: if domainAllowed()
         && (
           isAdmin() ||
+          isAdminEmail() ||
           (request.auth.uid == userId
             && request.resource.data.role == resource.data.role
             && (
@@ -154,6 +155,22 @@ service cloud.firestore {
           (!('fotoUrl' in request.resource.data) || request.resource.data.fotoUrl is string) &&
           (!('fotoDriveLink' in request.resource.data) || request.resource.data.fotoDriveLink is string);
       }
+    }
+
+    // Auditoria: leitura restrita a admins e escrita automática pelo app.
+    match /audit-logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if domainAllowed()
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.module is string
+        && request.resource.data.entityType is string
+        && request.resource.data.entityId is string
+        && request.resource.data.action is string
+        && request.resource.data.actor is map
+        && request.resource.data.actor.uid == request.auth.uid
+        && request.resource.data.actor.email == request.auth.token.email
+        && request.resource.data.changedFields is list;
+      allow update, delete: if false;
     }
 
     // Weekly Tasks (coleção atual usada no app)

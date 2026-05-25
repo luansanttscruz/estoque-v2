@@ -14,11 +14,14 @@ import {
   Download,
   Building2,
   Users,
+  Activity,
 } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 export default function SideMenu({ collapsed = false }) {
+  const { isAdmin } = useAuth();
   const [dynamicOffices, setDynamicOffices] = useState([]);
 
   useEffect(() => {
@@ -71,6 +74,9 @@ export default function SideMenu({ collapsed = false }) {
     { to: "/licenses", label: "Licenças", icon: KeyRound },
     { to: "/downloads", label: "Downloads", icon: Download },
     { to: "/users", label: "Usuários", icon: Users },
+    ...(isAdmin
+      ? [{ to: "/audit-logs", label: "Auditoria", icon: Activity }]
+      : []),
     { to: "/settings", label: "Configurações", icon: Settings },
   ];
 

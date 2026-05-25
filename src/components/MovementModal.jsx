@@ -21,6 +21,7 @@ import { Link } from "react-router-dom";
 import showToast from "../utils/showToast";
 import NotebookAnexoModal from "./NotebookAnexoModal";
 import DhlQuickQuoteModal from "./DhlQuickQuoteModal";
+import { createAuditLog, diffFields } from "../utils/auditLog";
 
 const tipos = ["Saida", "Entrada", "Transferência"];
 const statusTermo = ["Pendente", "Finalizado"];
@@ -854,6 +855,34 @@ export default function MovementModal({
           updatedAt: now,
         });
         await transferBatch.commit();
+        await createAuditLog({
+          module: "equipment-movement",
+          entityType: "equipment",
+          entityId: normalizedNumero,
+          action: "transfer",
+          before: {
+            tipo: "Entrada",
+            local: originOffice,
+            disponibilidade: "Disponível",
+            status: currentMovementEntry?.data?.status || "",
+            modelo: currentMovementEntry?.data?.modelo || normalizedModelo,
+          },
+          after: {
+            tipo: "Entrada",
+            origem: originOffice,
+            local,
+            disponibilidade: "Disponível",
+            status: computedStatus,
+            modelo: normalizedModelo,
+          },
+          changedFields: ["origem", "local", "disponibilidade", "historico"],
+          actor: usuario,
+          metadata: {
+            transferenciaId,
+            originOffice,
+            destinationOffice: local,
+          },
+        });
 
         showToast({
           type: "success",
@@ -945,10 +974,40 @@ export default function MovementModal({
           ...payload,
           historico: [...historicoAnterior, historyEntry],
         });
+        await createAuditLog({
+          module: "equipment-movement",
+          entityType: "equipment",
+          entityId: normalizedNumero,
+          action: "update",
+          before: buildMovementComparable(editMovement),
+          after: currentComparable,
+          changedFields: diffFields(
+            buildMovementComparable(editMovement),
+            currentComparable,
+          ),
+          actor: usuario,
+          metadata: {
+            movementId: editMovement.id,
+            office,
+          },
+        });
       } else if (variant !== "inventory") {
-        await addDoc(collection(db, "equipment-movements"), {
+        const createdRef = await addDoc(collection(db, "equipment-movements"), {
           ...payload,
           historico: [historyEntry],
+        });
+        await createAuditLog({
+          module: "equipment-movement",
+          entityType: "equipment",
+          entityId: normalizedNumero,
+          action: "create",
+          after: currentComparable,
+          changedFields: Object.keys(currentComparable),
+          actor: usuario,
+          metadata: {
+            movementId: createdRef.id,
+            office,
+          },
         });
       }
 

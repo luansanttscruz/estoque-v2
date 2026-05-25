@@ -12,6 +12,7 @@ import { Search, ShieldCheck, User, Users, X } from "lucide-react";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import showToast from "../utils/showToast";
+import { createAuditLog } from "../utils/auditLog";
 import {
   PERMISSION_AREAS,
   PERMISSION_OPTIONS,
@@ -169,6 +170,17 @@ export default function UsersPage() {
         updatedAt: serverTimestamp(),
         updatedBy: usuario?.email || "",
       });
+      await createAuditLog({
+        module: "users",
+        entityType: "user",
+        entityId: target.id,
+        action: "role_update",
+        before: { role: currentRole },
+        after: { role: nextRole },
+        changedFields: ["role"],
+        actor: usuario,
+        metadata: { targetEmail: target.email || "" },
+      });
       showToast({
         type: "success",
         message: "Perfil atualizado com sucesso.",
@@ -197,6 +209,17 @@ export default function UsersPage() {
         access: nextAccess,
         updatedAt: serverTimestamp(),
         updatedBy: usuario?.email || "",
+      });
+      await createAuditLog({
+        module: "users",
+        entityType: "user",
+        entityId: target.id,
+        action: "access_update",
+        before: { access: currentAccess },
+        after: { access: nextAccess },
+        changedFields: ["access"],
+        actor: usuario,
+        metadata: { targetEmail: target.email || "" },
       });
       showToast({
         type: "success",
@@ -253,6 +276,22 @@ export default function UsersPage() {
         permissions: permissionsDraft,
         updatedAt: serverTimestamp(),
         updatedBy: usuario?.email || "",
+      });
+      await createAuditLog({
+        module: "users",
+        entityType: "user",
+        entityId: selectedUser.id,
+        action: "permissions_update",
+        before: {
+          permissions: mergePermissions(
+            selectedUser.permissions,
+            buildPermissions(selectedUser.access || "edit"),
+          ),
+        },
+        after: { permissions: permissionsDraft },
+        changedFields: ["permissions"],
+        actor: usuario,
+        metadata: { targetEmail: selectedUser.email || "" },
       });
       showToast({
         type: "success",

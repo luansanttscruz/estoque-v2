@@ -32,6 +32,7 @@ import LicensesPage from "./pages/LicensesPage";
 import DownloadsPage from "./pages/DownloadsPage";
 import PeripheralsPage from "./pages/PeripheralsPage";
 import UsersPage from "./pages/UsersPage";
+import AuditLogsPage from "./pages/AuditLogsPage";
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -402,6 +403,15 @@ function App() {
             }
           />
           <Route path="/usuarios" element={<Navigate to="/users" replace />} />
+          <Route
+            path="/audit-logs"
+            element={
+              <RotaPrivada>
+                <AuditLogsPage />
+              </RotaPrivada>
+            }
+          />
+          <Route path="/auditoria" element={<Navigate to="/audit-logs" replace />} />
         </Routes>
       </AuthProvider>
     </Router>

@@ -11,6 +11,7 @@ import {
   ListChecks,
   Truck,
   Calculator,
+  Activity,
 } from "lucide-react";
 
 /** Ajuste a ordem como preferir */
@@ -26,6 +27,7 @@ export const primaryNav = [
   { title: "Cotação rápida", to: "/cotacao-rapida", Icon: Calculator },
   { title: "Licenças", to: "/licenses", Icon: KeyRound },
   { title: "Downloads", to: "/downloads", Icon: DownloadIcon },
+  { title: "Auditoria", to: "/audit-logs", Icon: Activity },
   { title: "Configurações", to: "/settings", Icon: Cog },
 ];
 
