@@ -33,6 +33,7 @@ import DownloadsPage from "./pages/DownloadsPage";
 import PeripheralsPage from "./pages/PeripheralsPage";
 import UsersPage from "./pages/UsersPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import TermosPage from "./pages/TermosPage";
 
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -300,6 +301,14 @@ function App() {
             element={
               <RotaPrivada>
                 <DocsPage />
+              </RotaPrivada>
+            }
+          />
+          <Route
+            path="/termos"
+            element={
+              <RotaPrivada>
+                <TermosPage />
               </RotaPrivada>
             }
           />

@@ -5,15 +5,20 @@ import {
   BarChart3,
   Boxes,
   Building2,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Clock3,
+  FileSignature,
   Laptop,
   PackageCheck,
   PieChart,
   Table2,
+  Timer,
 } from "lucide-react";
 import { db } from "../firebase";
 import { parseAvailability } from "../utils/availability";
+import termosBase from "../data/termos.json";
 
 const OFFICES = [
   { id: "sao-paulo", name: "São Paulo", collectionName: "sao-paulo" },
@@ -51,6 +56,28 @@ const VIEW_OPTIONS = [
   { id: "pie", label: "Distribuição", Icon: PieChart },
   { id: "bars", label: "Comparativo", Icon: BarChart3 },
 ];
+
+const TERM_MONTH_LABELS = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
+];
+
+const TERM_STATUS_COLORS = {
+  signed: "#10b981",
+  inProgress: "#3b82f6",
+  pending: "#f59e0b",
+  canceled: "#ef4444",
+};
 
 const normalizeModel = (value) => {
   const model = String(value || "").trim();
@@ -143,6 +170,28 @@ const mergePeripheralModels = (offices) => {
   );
 };
 
+const normalizeText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+
+const parseTermMonthIndex = (value) => {
+  const [, month] = String(value || "").split("/").map(Number);
+  return month >= 1 && month <= 12 ? month - 1 : -1;
+};
+
+const sanitizeTerm = (item = {}) => ({
+  nome: String(item.nome || "").trim(),
+  email: String(item.email || "").trim().toLowerCase(),
+  dataEnvio: String(item.dataEnvio || "").trim(),
+  dataAssinatura: String(item.dataAssinatura || "").trim(),
+  status: String(item.status || "Em andamento").trim(),
+  slaDias: String(item.slaDias || "").trim(),
+  mes: String(item.mes || "").trim(),
+});
+
 export default function DashboardPage() {
   const [stockByOffice, setStockByOffice] = useState(() =>
     OFFICES.reduce((acc, office) => {
@@ -151,13 +200,14 @@ export default function DashboardPage() {
     }, {})
   );
   const [peripherals, setPeripherals] = useState([]);
+  const [firestoreTerms, setFirestoreTerms] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("current");
 
   useEffect(() => {
     const loadedSnapshots = new Set();
-    const expectedSnapshots = OFFICES.length + 1;
+    const expectedSnapshots = OFFICES.length + 2;
 
     const markLoaded = (key) => {
       loadedSnapshots.add(key);
@@ -201,6 +251,23 @@ export default function DashboardPage() {
       }
     );
 
+    const unsubTerms = onSnapshot(
+      collection(db, "terms"),
+      (snapshot) => {
+        setFirestoreTerms(
+          snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }))
+        );
+        markLoaded("terms");
+      },
+      (error) => {
+        console.error("Erro ao carregar termos:", error);
+        markLoaded("terms");
+      }
+    );
+
     const unsubSettings = onSnapshot(
       APP_SETTINGS_DOC,
       (snapshot) => {
@@ -214,6 +281,7 @@ export default function DashboardPage() {
     return () => {
       unsubStock.forEach((unsubscribe) => unsubscribe());
       unsubPeripherals();
+      unsubTerms();
       unsubSettings();
     };
   }, []);
@@ -334,6 +402,68 @@ export default function DashboardPage() {
     };
   }, [categoryLabelById, peripherals, stockByOffice]);
 
+  const terms = useMemo(() => {
+    const map = new Map(
+      termosBase.map((item) => [item.id, { ...item, source: "base" }])
+    );
+    firestoreTerms.forEach((item) => {
+      map.set(item.id, {
+        ...map.get(item.id),
+        ...item,
+        source: "firestore",
+      });
+    });
+    return Array.from(map.values()).map((item) => ({
+      ...item,
+      ...sanitizeTerm(item),
+    }));
+  }, [firestoreTerms]);
+
+  const termsDashboardData = useMemo(() => {
+    const signed = terms.filter(
+      (item) => normalizeText(item.status) === "concluido"
+    ).length;
+    const inProgress = terms.filter(
+      (item) => normalizeText(item.status) === "em andamento"
+    ).length;
+    const pending = terms.filter(
+      (item) => normalizeText(item.status) === "pendente"
+    ).length;
+    const canceled = terms.filter(
+      (item) => normalizeText(item.status) === "cancelado"
+    ).length;
+    const slaValues = terms
+      .filter((item) => String(item.slaDias || "").trim() !== "")
+      .map((item) => Number(item.slaDias))
+      .filter((value) => Number.isFinite(value));
+    const averageSla = slaValues.length
+      ? Math.round(
+          slaValues.reduce((sum, value) => sum + value, 0) / slaValues.length
+        )
+      : 0;
+    const monthlyRows = Array.from({ length: 12 }, (_, index) => ({
+      label: TERM_MONTH_LABELS[index],
+      value: 0,
+    }));
+
+    terms.forEach((item) => {
+      const monthIndex = parseTermMonthIndex(item.dataEnvio);
+      if (monthIndex >= 0) monthlyRows[monthIndex].value += 1;
+    });
+
+    return {
+      summary: {
+        total: terms.length,
+        signed,
+        inProgress,
+        pending,
+        canceled,
+        averageSla,
+      },
+      monthlyRows,
+    };
+  }, [terms]);
+
   const stockTotalDetails = dashboardData.stockOffices
     .map((office) => ({ label: office.name, value: office.total }))
     .filter((item) => item.value > 0);
@@ -409,6 +539,8 @@ export default function DashboardPage() {
         />
       </section>
 
+      <TermsDashboard data={termsDashboardData} />
+
       <ViewSwitcher value={viewMode} onChange={setViewMode} />
 
       {viewMode === "current" && (
@@ -459,6 +591,219 @@ export default function DashboardPage() {
         />
       )}
     </div>
+  );
+}
+
+function TermsDashboard({ data }) {
+  const { summary, monthlyRows } = data;
+  const cards = [
+    {
+      label: "Total enviados",
+      value: summary.total,
+      hint: "termos",
+      Icon: FileSignature,
+      accentClass: "text-[var(--accent)]",
+      barClass: "bg-[var(--accent)]",
+    },
+    {
+      label: "Assinados",
+      value: summary.signed,
+      hint: "concluídos",
+      Icon: CheckCircle2,
+      accentClass: "text-emerald-300",
+      barClass: "bg-emerald-500",
+    },
+    {
+      label: "Pendentes",
+      value: summary.pending,
+      hint: "aguardando",
+      Icon: Clock3,
+      accentClass: "text-amber-300",
+      barClass: "bg-amber-500",
+    },
+    {
+      label: "Em andamento",
+      value: summary.inProgress,
+      hint: "em processo",
+      Icon: Clock3,
+      accentClass: "text-blue-300",
+      barClass: "bg-blue-500",
+    },
+    {
+      label: "SLA médio",
+      value: `${summary.averageSla}d`,
+      hint: "envio-assinatura",
+      Icon: Timer,
+      accentClass: "text-violet-300",
+      barClass: "bg-violet-500",
+    },
+  ];
+
+  return (
+    <section className="space-y-4">
+      <header className="flex items-center gap-3">
+        <div className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-2 text-[var(--accent)]">
+          <FileSignature className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-xl font-semibold text-[var(--text)]">Termos</h2>
+          <p className="text-sm text-[var(--text-muted)]">
+            Controle de envio, assinatura e SLA dos termos.
+          </p>
+        </div>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {cards.map((card) => (
+          <TermsMetricCard key={card.label} {...card} />
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.8fr)]">
+        <TermsMonthlyChart rows={monthlyRows} />
+        <TermsStatusDonut summary={summary} />
+      </div>
+    </section>
+  );
+}
+
+function TermsMetricCard({
+  label,
+  value,
+  hint,
+  Icon,
+  accentClass = "text-[var(--accent)]",
+  barClass = "bg-[var(--accent)]",
+}) {
+  return (
+    <article className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] p-5 shadow-lg">
+      <div className={`absolute inset-y-0 left-0 w-1 ${barClass}`} />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+            <Icon className={`h-4 w-4 ${accentClass}`} />
+            {label}
+          </div>
+          <div className="mt-3 text-3xl font-semibold text-[var(--text)]">
+            {value}
+          </div>
+          <div className="mt-1 text-sm text-[var(--text-muted)]">{hint}</div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function TermsMonthlyChart({ rows }) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+
+  return (
+    <ChartCard
+      title="Termos por mês"
+      description="Quantidade enviada por mês."
+      icon={FileSignature}
+    >
+      <div className="h-56">
+        <div className="flex h-full items-end gap-2 border-b border-l border-[var(--line)] px-2 pb-2">
+          {rows.map((row) => (
+            <div
+              key={row.label}
+              className="flex h-full flex-1 flex-col justify-end gap-2"
+            >
+              <div className="flex flex-1 items-end">
+                <div
+                  className="w-full rounded-t-md bg-[var(--accent)]/85 transition hover:bg-[var(--accent)]"
+                  style={{
+                    height: `${Math.max(4, (row.value / max) * 100)}%`,
+                  }}
+                  title={`${row.label}: ${formatNumber(row.value)}`}
+                />
+              </div>
+              <div className="text-center text-xs text-[var(--text-muted)]">
+                {row.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ChartCard>
+  );
+}
+
+function TermsStatusDonut({ summary }) {
+  const total = Math.max(1, summary.total);
+  const rows = [
+    { label: "Assinado", value: summary.signed, color: TERM_STATUS_COLORS.signed },
+    {
+      label: "Em andamento",
+      value: summary.inProgress,
+      color: TERM_STATUS_COLORS.inProgress,
+    },
+    { label: "Pendente", value: summary.pending, color: TERM_STATUS_COLORS.pending },
+    { label: "Cancelado", value: summary.canceled, color: TERM_STATUS_COLORS.canceled },
+  ].filter((row) => row.value > 0);
+
+  let offset = 0;
+  const gradient = rows.length
+    ? rows
+        .map((row) => {
+          const start = offset;
+          const end = offset + (row.value / total) * 100;
+          offset = end;
+          return `${row.color} ${start}% ${end}%`;
+        })
+        .join(", ")
+    : "rgba(148, 163, 184, 0.35) 0% 100%";
+
+  return (
+    <ChartCard
+      title="Status dos termos"
+      description="Distribuição por situação."
+      icon={PieChart}
+    >
+      <div className="flex flex-col items-center gap-5">
+        <div
+          className="relative h-56 w-56 rounded-full border border-[var(--line)] shadow-inner"
+          style={{ background: `conic-gradient(from -90deg, ${gradient})` }}
+        >
+          <div className="absolute inset-12 rounded-full border border-[var(--line)] bg-[var(--bg-card)]" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
+              Total
+            </span>
+            <strong className="text-2xl text-[var(--text)]">
+              {formatNumber(summary.total)}
+            </strong>
+          </div>
+        </div>
+
+        <div className="grid w-full gap-2 text-sm sm:grid-cols-2">
+          {rows.length ? (
+            rows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--bg-soft)] px-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2 text-[var(--text-muted)]">
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: row.color }}
+                  />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <strong className="text-[var(--text)]">
+                  {formatNumber(row.value)}
+                </strong>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full">
+              <EmptyChartMessage />
+            </div>
+          )}
+        </div>
+      </div>
+    </ChartCard>
   );
 }
 

@@ -73,6 +73,16 @@ service cloud.firestore {
         );
     }
 
+    function canEditTerms() {
+      return domainAllowed()
+        && (
+          isAdmin()
+          || (hasPermissions() && userDoc().data.permissions.terms == "edit")
+          || (hasPermissions() && !("terms" in userDoc().data.permissions) && userDoc().data.access == "edit")
+          || (!hasPermissions() && userDoc().data.access == "edit")
+        );
+    }
+
     function isAdminEmail() {
       return domainAllowed() && request.auth.token.email == "luan.cruz@vtex.com";
     }
@@ -233,6 +243,27 @@ service cloud.firestore {
     match /peripherals/{docId} {
       allow read: if domainAllowed();
       allow create, update, delete: if canEditPeripherals();
+    }
+
+    // Termos de envio e assinatura
+    match /terms/{docId} {
+      allow read: if domainAllowed();
+      allow create, update: if canEditTerms() && termValid();
+      allow delete: if false;
+
+      function termValid() {
+        return
+          (request.resource.data.nome is string) &&
+          (request.resource.data.email is string) &&
+          (request.resource.data.dataEnvio is string) &&
+          (request.resource.data.dataAssinatura is string) &&
+          (request.resource.data.status in ['Em andamento','Pendente','Concluído','Cancelado']) &&
+          (request.resource.data.slaDias is string) &&
+          (request.resource.data.mes is string) &&
+          (request.resource.data.createdAt is timestamp) &&
+          (request.resource.data.updatedAt is timestamp) &&
+          (!('historico' in request.resource.data) || request.resource.data.historico is list);
+      }
     }
 
     // Bloqueio padrão — deixe sempre por último

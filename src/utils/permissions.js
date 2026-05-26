@@ -8,6 +8,7 @@ export const PERMISSION_AREAS = [
   { key: "movement", label: "Equipment Movement" },
   { key: "peripherals", label: "Peripherals" },
   { key: "onboarding", label: "Onboarding" },
+  { key: "terms", label: "Termos" },
   { key: "weeklyTasks", label: "Weekly Tasks" },
   { key: "licenses", label: "Licencas" },
   { key: "downloads", label: "Downloads" },

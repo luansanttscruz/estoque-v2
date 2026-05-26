@@ -8,6 +8,7 @@ import {
   Download as DownloadIcon,
   Cog,
   FileText,
+  FileSignature,
   ListChecks,
   Truck,
   Calculator,
@@ -21,6 +22,7 @@ export const primaryNav = [
   { title: "Notebook Stock", to: "/inventory", Icon: Laptop }, // segue como principal (2º)
   { title: "Peripherals", to: "/peripherals", Icon: Boxes },
   { title: "Onboarding Nacional", to: "/onboarding", Icon: FileText },
+  { title: "Termos", to: "/termos", Icon: FileSignature },
   { title: "Documentation", to: "/docs", Icon: FileText },
   { title: "Weekly Tasks", to: "/weekly-tasks", Icon: ListChecks },
   { title: "Equipment Movement", to: "/equipment-movement", Icon: Truck },
